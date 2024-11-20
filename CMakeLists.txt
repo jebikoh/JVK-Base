@@ -5,7 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(Vulkan REQUIRED)
 
-add_executable(JVK_Engine src/main.cpp)
+add_executable(JVK_Engine src/main.cpp
+        src/engine.cpp
+        src/engine.hpp
+        src/jvk.hpp)
 
 add_subdirectory(include/vkbootstrap)
 add_subdirectory(include/vma)
