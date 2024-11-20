@@ -13,6 +13,18 @@ namespace jvk {
 
 constexpr bool USE_VALIDATION_LAYERS = false;
 
+void Engine::init() {
+    initSDL();
+    initVulkan();
+    initSwapchain();
+}
+
+void Engine::destroy() {
+    swapchain_.destroy(instance_);
+    instance_.destroy();
+    SDL_DestroyWindow(window_);
+}
+
 void Engine::initSDL() {
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -29,22 +41,22 @@ void Engine::initSDL() {
 void Engine::initVulkan() {
     vkb::InstanceBuilder builder;
 
-    auto instance = builder.set_app_name("JVK")
+    auto vkbInstance = builder.set_app_name("JVK")
         .request_validation_layers(USE_VALIDATION_LAYERS)
         .use_default_debug_messenger()
         .require_api_version(1, 3, 0)
         .build();
 
-    if (!instance) {
-        std::cerr << "Failed to create Vulkan instance. Error: " << instance.error().message() << "\n";
+    if (!vkbInstance) {
+        std::cerr << "Failed to create Vulkan instance. Error: " << vkbInstance.error().message() << "\n";
         return;
     }
 
-    vkb::Instance vkbInst = instance.value();
-    instance_ = vkbInst.instance;
-    debug_ = vkbInst.debug_messenger;
+    vkb::Instance vkbInst = vkbInstance.value();
+    instance_.instance = vkbInst.instance;
+    instance_.debug = vkbInst.debug_messenger;
 
-    SDL_Vulkan_CreateSurface(window_, instance_, &surface_);
+    SDL_Vulkan_CreateSurface(window_, instance_.instance, &instance_.surface);
 
     // Features
     VkPhysicalDeviceVulkan13Features features13{};
@@ -63,19 +75,19 @@ void Engine::initVulkan() {
                       .set_minimum_version(1, 3)
                       .set_required_features_13(features13)
                       .set_required_features_12(features12)
-                      .set_surface(surface_)
+                      .set_surface(instance_.surface)
                       .select()
                       .value();
-    physicalDevice_ = vkbPhysicalDevice.physical_device;
+    instance_.physicalDevice = vkbPhysicalDevice.physical_device;
 
     vkb::DeviceBuilder deviceBuilder{vkbPhysicalDevice};
     vkb::Device vkbDevice = deviceBuilder.build().value();
-    device_ = vkbDevice.device;
+    instance_.device = vkbDevice.device;
 }
 
-void Engine::init() {
-    initSDL();
-    initVulkan();
+void Engine::initSwapchain() {
+    swapchain_ = Swapchain{instance_, windowExtent_.width, windowExtent_.height};
 }
+
 
 }// namespace jvk
