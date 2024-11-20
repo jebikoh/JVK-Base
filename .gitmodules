@@ -1,0 +1,10 @@
+[submodule "include/vkbootstrap"]
+	path = include/vkbootstrap
+	url = https://github.com/charles-lunarg/vk-bootstrap
+[submodule "include/vma"]
+	path = include/vma
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "include/sdl"]
+	path = include/sdl
+	url = https://github.com/libsdl-org/SDL.git
+	branch = release-2.30.x
