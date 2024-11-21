@@ -1,6 +1,6 @@
 #pragma once
 
-#include "instance.hpp"
+#include "Context.hpp"
 #include "jvk.hpp"
 #include <VkBootstrap.h>
 
@@ -14,7 +14,7 @@ struct Swapchain {
     std::vector<VkImageView> imageViews;
     VkExtent2D extent;
 
-    Swapchain(Instance &instance,
+    Swapchain(Context &instance,
               uint32_t width,
               uint32_t height,
               VkFormat format = VK_FORMAT_B8G8R8A8_UNORM,
@@ -44,7 +44,7 @@ struct Swapchain {
         imageViews = vkbSwapchain.get_image_views().value();
     }
 
-    void destroy(Instance &instance) {
+    void destroy(Context &instance) {
         vkDestroySwapchainKHR(instance.device, swapchain, nullptr);
         for (auto & imageView : imageViews) vkDestroyImageView(instance.device, imageView, nullptr);
     }
