@@ -12,6 +12,8 @@ struct Context {
     VkDevice device;
     VkSurfaceKHR surface;
 
+    Context() {};
+
     void destroy() const {
         vkDestroySurfaceKHR(instance, surface, nullptr);
         vkDestroyDevice(device, nullptr);

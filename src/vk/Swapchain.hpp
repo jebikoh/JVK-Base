@@ -14,7 +14,7 @@ struct Swapchain {
     std::vector<VkImageView> imageViews;
     VkExtent2D extent;
 
-    Swapchain() = default;
+    Swapchain() {};
 
     Swapchain(Context &context,
               uint32_t width,

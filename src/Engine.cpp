@@ -1,7 +1,3 @@
-//
-// Created by Aneesh on 11/20/2024.
-//
-
 #include "Engine.hpp"
 
 #include "vk/Commands.hpp"
@@ -15,7 +11,7 @@
 
 namespace jvk {
 
-constexpr bool USE_VALIDATION_LAYERS = false;
+constexpr bool USE_VALIDATION_LAYERS = true;
 
 void Engine::init() {
     initSDL();
@@ -86,13 +82,18 @@ void Engine::initVulkan() {
 
     // Device
     vkb::PhysicalDeviceSelector selector{vkbInst};
-    auto vkbPhysicalDevice = selector
+    auto vkbPhysicalDeviceResult = selector
                       .set_minimum_version(1, 3)
                       .set_required_features_13(features13)
                       .set_required_features_12(features12)
                       .set_surface(context_.surface)
-                      .select()
-                      .value();
+                      .select();
+    if (!vkbPhysicalDeviceResult) {
+        std::cerr << "Failed to select physical device. Error: " << vkbPhysicalDeviceResult.error().message() << "\n";
+        return;
+    }
+    const auto& vkbPhysicalDevice = vkbPhysicalDeviceResult.value();
+
     context_.physicalDevice = vkbPhysicalDevice.physical_device;
 
     vkb::DeviceBuilder deviceBuilder{vkbPhysicalDevice};
@@ -122,6 +123,7 @@ void Engine::initSyncStructures() {
         frame.drawFence.init(context_, VK_FENCE_CREATE_SIGNALED_BIT);
     }
 }
+
 void Engine::draw() {
     auto &frame = this->getCurrentFrame();
     frame.drawFence.wait(context_);
@@ -162,6 +164,7 @@ void Engine::draw() {
 
     frameNumber_++;
 }
+
 void Engine::run() {
     SDL_Event e;
     bool quit = false;

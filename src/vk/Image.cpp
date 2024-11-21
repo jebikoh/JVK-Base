@@ -4,7 +4,7 @@
 
 #include "Image.hpp"
 
-VkImageSubresourceRange imageSubresourceRange(VkImageAspectFlags aspectMask) {
+VkImageSubresourceRange jvk::imageSubresourceRange(VkImageAspectFlags aspectMask) {
     VkImageSubresourceRange subresourceRange{};
     subresourceRange.aspectMask = aspectMask;
     subresourceRange.baseMipLevel = 0;
@@ -30,6 +30,7 @@ void jvk::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout oldL
 
     VkImageAspectFlags aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
     imBarrier.subresourceRange = imageSubresourceRange(aspectMask);
+    imBarrier.image            = image;
 
     VkDependencyInfo depInfo{};
     depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;

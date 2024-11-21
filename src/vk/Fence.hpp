@@ -5,6 +5,8 @@ namespace jvk {
     struct Fence {
         VkFence fence;
 
+        Fence() {}
+
         void init(VkDevice device, const VkFenceCreateFlags flags = 0) {
             VkFenceCreateInfo fenceInfo{};
             fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;

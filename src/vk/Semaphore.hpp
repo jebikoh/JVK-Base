@@ -5,6 +5,8 @@ namespace jvk {
 struct Semaphore {
     VkSemaphore semaphore;
 
+    Semaphore() {}
+
     void init(VkDevice device, VkSemaphoreCreateFlags flags = 0) {
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;

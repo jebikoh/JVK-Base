@@ -6,6 +6,8 @@ struct Queue {
     VkQueue queue;
     uint32_t family;
 
+    Queue() {}
+
     Queue(VkQueue queue, uint32_t family);
 };
 }

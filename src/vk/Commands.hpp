@@ -10,6 +10,8 @@ struct CommandPool {
     CommandPool(CommandPool const &) = delete;
     CommandPool &operator=(CommandPool const &) = delete;
 
+    CommandPool() {}
+
     CommandPool(
         VkDevice device,
         uint32_t familyIndex,

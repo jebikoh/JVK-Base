@@ -7,7 +7,7 @@ int main(int argc, char *argv[]) {
     jvk::Engine engine;
 
     engine.init();
-    engine.draw();
+    engine.run();
     engine.destroy();
 
     return 0;

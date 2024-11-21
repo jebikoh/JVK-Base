@@ -17,7 +17,9 @@ class Engine {
 public:
     Context context_;
     Swapchain swapchain_;
+
     bool stopRendering_ = false;
+    bool isInit_        = false;
 
     VkExtent2D windowExtent_{800, 600};
     SDL_Window* window_;
