@@ -1,5 +1,5 @@
 #pragma once
-#include "jvk.hpp"
+#include "../jvk.hpp"
 
 
 #include <vulkan/vulkan.h>
@@ -35,4 +35,13 @@ struct CommandPool {
     uint32_t familyIndex      = 0;
 };
 
+void beginCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferUsageFlags flags = 0);
+void endCommandBuffer(VkCommandBuffer commandBuffer);
+void submitCommandBuffer(
+        VkQueue queue,
+        VkCommandBuffer cmd,
+        VkSemaphoreSubmitInfo *wait,
+        VkSemaphoreSubmitInfo *signal,
+        VkFence fence
+);
 }

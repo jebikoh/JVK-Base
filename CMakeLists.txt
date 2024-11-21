@@ -9,13 +9,15 @@ add_executable(JVK_Engine src/main.cpp
         src/engine.cpp
         src/engine.hpp
         src/jvk.hpp
-        src/swapchain.hpp
-        src/Context.hpp
-        src/commands.hpp
-        src/commands.cpp
-        src/Queue.hpp
-        src/Fence.hpp
-        src/Semaphore.hpp)
+        src/vk/Swapchain.hpp
+        src/vk/Context.hpp
+        src/vk/Commands.hpp
+        src/vk/Commands.cpp
+        src/vk/Queue.hpp
+        src/vk/Fence.hpp
+        src/vk/Semaphore.hpp
+        src/vk/Image.cpp
+        src/vk/Image.hpp)
 
 add_subdirectory(include/vkbootstrap)
 add_subdirectory(include/vma)

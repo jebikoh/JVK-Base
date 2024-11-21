@@ -4,12 +4,14 @@
 
 #include "Engine.hpp"
 
-#include "Commands.hpp"
+#include "vk/Commands.hpp"
+#include "vk/Image.hpp"
 
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <VkBootstrap.h>
 #include <iostream>
+#include <thread>
 
 namespace jvk {
 
@@ -25,8 +27,11 @@ void Engine::init() {
 
 void Engine::destroy() {
     // Clean up frame command pools
-    for (auto &[commandPool, mainCommandBuffer] : frames_) {
-        commandPool.destroy();
+    for (auto & frame : frames_) {
+        frame.commandPool.destroy();
+        frame.drawFence.destroy(context_);
+        frame.drawSemaphore.destroy(context_);
+        frame.swapchainSemaphore.destroy(context_);
     }
 
     swapchain_.destroy(context_);
@@ -111,7 +116,67 @@ void Engine::initCommands() {
 }
 
 void Engine::initSyncStructures() {
+    for (auto & frame : frames_) {
+        frame.swapchainSemaphore.init(context_);
+        frame.drawSemaphore.init(context_);
+        frame.drawFence.init(context_, VK_FENCE_CREATE_SIGNALED_BIT);
+    }
+}
+void Engine::draw() {
+    auto &frame = this->getCurrentFrame();
+    frame.drawFence.wait(context_);
+    frame.drawFence.reset(context_);
 
+    auto swapchainImageIndex = swapchain_.acquireNextImage(context_, frame.swapchainSemaphore);
+
+    VkCommandBuffer cmd = getCurrentFrame().mainCommandBuffer;
+    VK_CHECK(vkResetCommandBuffer(cmd, 0));
+    beginCommandBuffer(cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    VkClearColorValue clearValue;
+    float flash = std::abs(std::sin(frameNumber_ / 120.f));
+    clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
+
+    VkImageSubresourceRange clearRange = imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+    vkCmdClearColorImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+
+    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    endCommandBuffer(cmd);
+
+    auto waitSemaphore = frame.swapchainSemaphore.submitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR);
+    auto signalSemaphore = frame.drawSemaphore.submitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+
+    submitCommandBuffer(graphicsQueue_.queue, cmd, &waitSemaphore, &signalSemaphore, frame.drawFence);
+
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.pNext              = nullptr;
+    presentInfo.pSwapchains        = &swapchain_.swapchain;
+    presentInfo.swapchainCount     = 1;
+    presentInfo.pWaitSemaphores    = &frame.drawSemaphore.semaphore;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pImageIndices      = &swapchainImageIndex;
+    VK_CHECK(vkQueuePresentKHR(graphicsQueue_.queue, &presentInfo));
+
+    frameNumber_++;
+}
+void Engine::run() {
+    SDL_Event e;
+    bool quit = false;
+
+    while (!quit) {
+        while (SDL_PollEvent(&e) != 0) {
+            if (e.type == SDL_QUIT) { quit = true;}
+            if (e.type == SDL_WINDOWEVENT) {
+                if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) { stopRendering_ = true; }
+                if (e.window.event == SDL_WINDOWEVENT_RESTORED) { stopRendering_ = false; }
+            }
+        }
+        if (stopRendering_) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+        else { draw(); }
+    }
 }
 #pragma endregion
 

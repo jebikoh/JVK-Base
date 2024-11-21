@@ -1,11 +1,11 @@
 #pragma once
 #include "jvk.hpp"
-#include "Commands.hpp"
-#include "Context.hpp"
-#include "Fence.hpp"
-#include "Queue.hpp"
-#include "Semaphore.hpp"
-#include "Swapchain.hpp"
+#include "vk/Commands.hpp"
+#include "vk/Context.hpp"
+#include "vk/Fence.hpp"
+#include "vk/Queue.hpp"
+#include "vk/Semaphore.hpp"
+#include "vk/Swapchain.hpp"
 
 #include <SDL_vulkan.h>
 
@@ -17,6 +17,7 @@ class Engine {
 public:
     Context context_;
     Swapchain swapchain_;
+    bool stopRendering_ = false;
 
     VkExtent2D windowExtent_{800, 600};
     SDL_Window* window_;
@@ -39,6 +40,7 @@ public:
     void init();
     void destroy();
     void draw();
+    void run();
 private:
     void initSDL();
     void initVulkan();

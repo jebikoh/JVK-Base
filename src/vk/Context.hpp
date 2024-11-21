@@ -1,7 +1,7 @@
 // ReSharper disable CppNonExplicitConversionOperator
 #pragma once
-#include "jvk.hpp"
-#include <VkBootstrap.h>
+#include "../jvk.hpp"
+#include "VkBootstrap.h"
 
 namespace jvk {
 

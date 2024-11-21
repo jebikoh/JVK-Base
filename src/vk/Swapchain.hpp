@@ -1,8 +1,8 @@
 #pragma once
 
+#include "../jvk.hpp"
 #include "Context.hpp"
-#include "jvk.hpp"
-#include <VkBootstrap.h>
+#include "VkBootstrap.h"
 
 namespace jvk {
 
@@ -14,7 +14,9 @@ struct Swapchain {
     std::vector<VkImageView> imageViews;
     VkExtent2D extent;
 
-    Swapchain(Context &instance,
+    Swapchain() = default;
+
+    Swapchain(Context &context,
               uint32_t width,
               uint32_t height,
               VkFormat format = VK_FORMAT_B8G8R8A8_UNORM,
@@ -22,7 +24,7 @@ struct Swapchain {
               VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR,
               VkImageUsageFlags imageUsageFlags = VK_IMAGE_USAGE_TRANSFER_DST_BIT
               ) {
-        vkb::SwapchainBuilder builder{instance.physicalDevice, instance.device, instance.surface};
+        vkb::SwapchainBuilder builder{context.physicalDevice, context.device, context.surface};
 
         imageFormat = format;
 
@@ -44,9 +46,15 @@ struct Swapchain {
         imageViews = vkbSwapchain.get_image_views().value();
     }
 
-    void destroy(Context &instance) {
-        vkDestroySwapchainKHR(instance.device, swapchain, nullptr);
-        for (auto & imageView : imageViews) vkDestroyImageView(instance.device, imageView, nullptr);
+    void destroy(Context &context) {
+        vkDestroySwapchainKHR(context, swapchain, nullptr);
+        for (auto & imageView : imageViews) vkDestroyImageView(context, imageView, nullptr);
+    }
+
+    uint32_t acquireNextImage(Context &context, VkSemaphore semaphore, float timeout = 1000000000) const {
+        uint32_t imageIndex;
+        VK_CHECK(vkAcquireNextImageKHR(context, swapchain, timeout, semaphore, nullptr, &imageIndex));
+        return imageIndex;
     }
 };
 
