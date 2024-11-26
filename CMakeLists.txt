@@ -17,7 +17,11 @@ add_executable(JVK_Engine src/main.cpp
         src/vk/Fence.hpp
         src/vk/Semaphore.hpp
         src/vk/Image.cpp
-        src/vk/Image.hpp)
+        src/vk/Image.hpp
+        src/DeletionQueue.hpp
+        src/vk/Allocator.cpp
+        src/vk/Allocator.hpp
+)
 
 add_subdirectory(include/vkbootstrap)
 add_subdirectory(include/vma)

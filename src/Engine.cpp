@@ -6,6 +6,7 @@
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <VkBootstrap.h>
+
 #include <iostream>
 #include <thread>
 
@@ -19,9 +20,12 @@ void Engine::init() {
     initSwapchain();
     initCommands();
     initSyncStructures();
+
+    isInit_ = true;
 }
 
 void Engine::destroy() {
+    if (!isInit_) { return; }
     vkDeviceWaitIdle(context_.device);
 
     // Clean up frame command pools
@@ -30,8 +34,10 @@ void Engine::destroy() {
         frame.drawFence.destroy(context_);
         frame.drawSemaphore.destroy(context_);
         frame.swapchainSemaphore.destroy(context_);
+        frame.deletionQueue.flush();
     }
 
+    globalDeletionQueue_.flush();
     swapchain_.destroy(context_);
     context_.destroy();
     SDL_DestroyWindow(window_);
@@ -105,6 +111,10 @@ void Engine::initVulkan() {
     // Queue
     graphicsQueue_.queue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
     graphicsQueue_.family = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+    // Allocator
+    allocator_.init(context_);
+    globalDeletionQueue_.push([&]() { allocator_.destroy(); });
 }
 
 void Engine::initSwapchain() {
@@ -129,6 +139,7 @@ void Engine::initSyncStructures() {
 void Engine::draw() {
     auto &frame = this->getCurrentFrame();
     frame.drawFence.wait(context_);
+    frame.deletionQueue.flush();
     frame.drawFence.reset(context_);
 
     auto swapchainImageIndex = swapchain_.acquireNextImage(context_, frame.swapchainSemaphore);
