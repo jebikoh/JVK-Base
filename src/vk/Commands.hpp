@@ -17,7 +17,6 @@ struct CommandPool {
         uint32_t familyIndex,
         VkCommandPoolCreateFlags flags
         );
-    ~CommandPool() { destroy(); }
 
     void init(
         VkDevice device,

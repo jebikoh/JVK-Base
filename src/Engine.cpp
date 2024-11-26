@@ -22,6 +22,8 @@ void Engine::init() {
 }
 
 void Engine::destroy() {
+    vkDeviceWaitIdle(context_.device);
+
     // Clean up frame command pools
     for (auto & frame : frames_) {
         frame.commandPool.destroy();
@@ -135,7 +137,7 @@ void Engine::draw() {
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
     beginCommandBuffer(cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
     VkClearColorValue clearValue;
     float flash = std::abs(std::sin(frameNumber_ / 120.f));
