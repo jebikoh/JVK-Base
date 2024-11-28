@@ -13,6 +13,8 @@ struct Allocator {
     void init(Context & context) { init(context.device, context.physicalDevice, context.instance); }
 
     void destroy() const { vmaDestroyAllocator(allocator); }
+
+    operator VmaAllocator() const { return allocator; }
 };
 
 }// namespace jvk

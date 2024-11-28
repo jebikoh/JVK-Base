@@ -119,6 +119,21 @@ void Engine::initVulkan() {
 
 void Engine::initSwapchain() {
     swapchain_ = Swapchain{context_, windowExtent_.width, windowExtent_.height};
+
+    VkExtent3D drawImageExtent = {
+            windowExtent_.width,
+            windowExtent_.height,
+            1
+    };
+
+    VkImageUsageFlags drawImageUsages{};
+    drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
+    drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    drawImage_.init(context_, allocator_, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, drawImageExtent);
+    globalDeletionQueue_.push([=, this]() { drawImage_.destroy(context_, allocator_); });
 }
 
 void Engine::initCommands() {
@@ -146,18 +161,20 @@ void Engine::draw() {
 
     VkCommandBuffer cmd = getCurrentFrame().mainCommandBuffer;
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
+
+    drawExtent_.width  = drawImage_.extent_.width;
+    drawExtent_.height = drawImage_.extent_.height;
+
     beginCommandBuffer(cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    drawBackground(cmd);
+    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-    VkClearColorValue clearValue;
-    float flash = std::abs(std::sin(frameNumber_ / 120.f));
-    clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
+    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyImage(cmd, drawImage_.image_, swapchain_.images[swapchainImageIndex], drawExtent_, swapchain_.extent);
+    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-    VkImageSubresourceRange clearRange = imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-    vkCmdClearColorImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
-
-    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     endCommandBuffer(cmd);
 
     auto waitSemaphore = frame.swapchainSemaphore.submitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR);
@@ -194,6 +211,17 @@ void Engine::run() {
         else { draw(); }
     }
 }
+
+void Engine::drawBackground(VkCommandBuffer cmd) const {
+    VkClearColorValue clearValue;
+    float flash = std::abs(std::sin(frameNumber_ / 120.f));
+    clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
+
+    VkImageSubresourceRange clearRange = imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+    vkCmdClearColorImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+
+}
+
 #pragma endregion
 
 }// namespace jvk

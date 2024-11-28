@@ -72,9 +72,64 @@ VkImageViewCreateInfo jvk::create::imageViewCreateInfo(VkFormat format, VkImage 
     return info;
 }
 
-void jvk::Image::init(jvk::Allocator &allocator, VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent, VkImageAspectFlags aspectFlags) {
+void jvk::Image::init(VkDevice device, jvk::Allocator &allocator, VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent) {
     format_ = format;
     extent_ = extent;
 
     auto imageCreateInfo = create::imageCreateInfo(format_, usageFlags, extent_);
+
+    VmaAllocationCreateInfo imageAllocInfo = {};
+    imageAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+    imageAllocInfo.requiredFlags = VkMemoryPropertyFlags (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vmaCreateImage(allocator, &imageCreateInfo, &imageAllocInfo, &this->image_, &this->allocation_, nullptr);
+
+    // Image view
+    auto imageViewCreateInfo = create::imageViewCreateInfo(this->format_, this->image_, VK_IMAGE_ASPECT_COLOR_BIT);
+    VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &this->view_));
 }
+
+void jvk::Image::destroy(VkDevice device, Allocator &allocator) const {
+    vkDestroyImageView(device, view_, nullptr);
+    vmaDestroyImage(allocator, image_, allocation_);
+}
+
+void jvk::copyImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExtent2D srcSize, VkExtent2D dstSize) {
+    VkImageBlit2 blitRegion{};
+    blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+    blitRegion.pNext = nullptr;
+
+    blitRegion.srcOffsets[1].x = srcSize.width;
+    blitRegion.srcOffsets[1].y = srcSize.height;
+    blitRegion.srcOffsets[1].z = 1;
+
+    blitRegion.dstOffsets[1].x = dstSize.width;
+    blitRegion.dstOffsets[1].y = dstSize.height;
+    blitRegion.dstOffsets[1].z = 1;
+
+    blitRegion.srcSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    blitRegion.srcSubresource.baseArrayLayer = 0;
+    blitRegion.srcSubresource.layerCount     = 1;
+    blitRegion.srcSubresource.mipLevel       = 0;
+
+    blitRegion.dstSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    blitRegion.dstSubresource.baseArrayLayer = 0;
+    blitRegion.dstSubresource.layerCount     = 1;
+    blitRegion.dstSubresource.mipLevel       = 0;
+
+    VkBlitImageInfo2 blitInfo{};
+    blitInfo.sType          = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+    blitInfo.pNext          = nullptr;
+    blitInfo.dstImage       = dst;
+    blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    blitInfo.srcImage       = src;
+    blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    blitInfo.filter         = VK_FILTER_LINEAR;
+    blitInfo.regionCount    = 1;
+    blitInfo.pRegions       = &blitRegion;
+
+    vkCmdBlitImage2(cmd, &blitInfo);
+}
+
+//void jvk::copyImage(VkCommandBuffer cmd, jvk::Image &src, jvk::Image &dst) {
+//    copyImage(cmd, src.image_, dst.image_, src.extent_, dst.extent_);
+//}

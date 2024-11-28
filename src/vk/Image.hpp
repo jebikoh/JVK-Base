@@ -14,12 +14,14 @@ public:
     VkFormat      format_;
 
     void init(
+            VkDevice device,
             Allocator &allocator,
             VkFormat format,
             VkImageUsageFlags usageFlags,
-            VkExtent3D extent,
-            VkImageAspectFlags aspectFlags)
-            ;
+            VkExtent3D extent
+            );
+
+    void destroy(VkDevice device, Allocator &allocator) const;
 };
 
 namespace create {
@@ -35,4 +37,9 @@ void transitionImage(
         VkImageLayout oldLayout,
         VkImageLayout newLayout
         );
+
+void copyImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExtent2D srcSize, VkExtent2D dstSize);
+
+//void copyImage(VkCommandBuffer cmd, Image &src, Image &dst);
 }
+

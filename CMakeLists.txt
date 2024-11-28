@@ -18,7 +18,7 @@ add_executable(JVK_Engine src/main.cpp
         src/vk/Semaphore.hpp
         src/vk/Image.cpp
         src/vk/Image.hpp
-        src/DeletionQueue.hpp
+        src/DeletionStack.hpp
         src/vk/Allocator.cpp
         src/vk/Allocator.hpp
 )

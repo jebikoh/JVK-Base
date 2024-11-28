@@ -2,8 +2,9 @@
 
 #include "jvk.hpp"
 #include <functional>
+#include <ranges>
 
-struct DeletionQueue {
+struct DeletionStack {
     std::vector<std::function<void()>> queue;
 
     void push(std::function<void()> && function) {
@@ -11,7 +12,9 @@ struct DeletionQueue {
     }
 
     void flush() {
-        for (auto &function : queue) { function(); }
+        for (auto & it : std::ranges::reverse_view(queue)) {
+            it();
+        }
         queue.clear();
     }
 };
