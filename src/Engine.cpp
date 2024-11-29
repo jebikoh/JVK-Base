@@ -2,6 +2,8 @@
 
 #include "vk/Commands.hpp"
 #include "vk/Image.hpp"
+#include "vk/Descriptors.hpp"
+#include "Shaders.hpp"
 
 #include <SDL.h>
 #include <SDL_vulkan.h>
@@ -20,6 +22,7 @@ void Engine::init() {
     initSwapchain();
     initCommands();
     initSyncStructures();
+    initDescriptors();
 
     isInit_ = true;
 }
@@ -220,6 +223,44 @@ void Engine::drawBackground(VkCommandBuffer cmd) const {
     VkImageSubresourceRange clearRange = imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
     vkCmdClearColorImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
 
+}
+
+void Engine::initDescriptors() {
+    std::vector<DescriptorAllocator::PoolSizeRatio> sizes =
+    {
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}
+    };
+
+    descriptorAllocator_.initPool(context_, 10, sizes);
+
+    // Compute layout
+    {
+        DescriptorSetBindings bindings;
+        bindings.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        drawImageDescriptorLayout_ = bindings.build(context_, VK_SHADER_STAGE_COMPUTE_BIT);
+
+        drawImageDescriptor_ = descriptorAllocator_.allocate(context_, drawImageDescriptorLayout_);
+
+        VkDescriptorImageInfo imgInfo{};
+        imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        imgInfo.imageView   = drawImage_.view_;
+
+        VkWriteDescriptorSet drawImageWrite = {};
+        drawImageWrite.sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        drawImageWrite.pNext                = nullptr;
+        drawImageWrite.dstBinding           = 0;
+        drawImageWrite.dstSet               = drawImageDescriptor_;
+        drawImageWrite.descriptorCount      = 1;
+        drawImageWrite.descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        drawImageWrite.pImageInfo           = &imgInfo;
+
+        vkUpdateDescriptorSets(context_, 1, &drawImageWrite, 0, nullptr);
+
+        globalDeletionQueue_.push([&]() {
+            descriptorAllocator_.destroyPool(context_);
+            vkDestroyDescriptorSetLayout(context_, drawImageDescriptorLayout_, nullptr);
+        });
+    }
 }
 
 #pragma endregion

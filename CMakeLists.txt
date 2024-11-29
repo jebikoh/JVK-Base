@@ -21,6 +21,9 @@ add_executable(JVK_Engine src/main.cpp
         src/DeletionStack.hpp
         src/vk/Allocator.cpp
         src/vk/Allocator.hpp
+        src/vk/Descriptors.hpp
+        src/vk/Descriptors.cpp
+        src/Shaders.hpp
 )
 
 add_subdirectory(include/vkbootstrap)

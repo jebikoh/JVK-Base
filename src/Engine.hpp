@@ -8,6 +8,7 @@
 #include "vk/Swapchain.hpp"
 #include "vk/Allocator.hpp"
 #include "vk/Image.hpp"
+#include "vk/Descriptors.hpp"
 
 #include "DeletionStack.hpp"
 
@@ -20,10 +21,11 @@ constexpr unsigned int NUM_FRAMES = 2;
 
 class Engine {
 public:
-    Context       context_;
-    Swapchain     swapchain_;
-    DeletionStack globalDeletionQueue_;
-    Allocator  allocator_;
+    Context             context_;
+    Swapchain           swapchain_;
+    DeletionStack       globalDeletionQueue_;
+    Allocator           allocator_;
+    DescriptorAllocator descriptorAllocator_;
 
     bool stopRendering_ = false;
     bool isInit_        = false;
@@ -46,8 +48,11 @@ public:
     size_t    frameNumber_ = 0;
     FrameData frames_[NUM_FRAMES];
     FrameData &getCurrentFrame() { return frames_[frameNumber_ % NUM_FRAMES]; }
+
     Image drawImage_;
     VkExtent2D drawExtent_;
+    VkDescriptorSet drawImageDescriptor_;
+    VkDescriptorSetLayout drawImageDescriptorLayout_;
 
     Queue graphicsQueue_;
 
@@ -61,8 +66,9 @@ private:
     void initSwapchain();
     void initCommands();
     void initSyncStructures();
+    void initDescriptors();
 
-    //
+    // Flashing background
     void drawBackground(VkCommandBuffer cmd) const;
 };
 }// namespace jvk
