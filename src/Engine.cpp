@@ -3,11 +3,16 @@
 #include "vk/Commands.hpp"
 #include "vk/Image.hpp"
 #include "vk/Descriptors.hpp"
+#include "vk/Render.hpp"
 #include "Shaders.hpp"
 
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <VkBootstrap.h>
+
+#include <imgui.h>
+#include <imgui_impl_sdl2.h>
+#include <imgui_impl_vulkan.h>
 
 #include <iostream>
 #include <thread>
@@ -23,6 +28,7 @@ void Engine::init() {
     initCommands();
     initSyncStructures();
     initDescriptors();
+    initImGUI();
 
     isInit_ = true;
 }
@@ -120,6 +126,59 @@ void Engine::initVulkan() {
     globalDeletionQueue_.push([&]() { allocator_.destroy(); });
 }
 
+void Engine::initImGUI() {
+    VkDescriptorPoolSize pool_sizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+                                         { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
+
+    VkDescriptorPoolCreateInfo pool_info = {};
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    pool_info.maxSets = 1000;
+    pool_info.poolSizeCount = (uint32_t)std::size(pool_sizes);
+    pool_info.pPoolSizes = pool_sizes;
+
+    VkDescriptorPool imguiPool;
+    VK_CHECK(vkCreateDescriptorPool(context_, &pool_info, nullptr, &imguiPool));
+
+    ImGui::CreateContext();
+
+    ImGui_ImplSDL2_InitForVulkan(window_);
+
+    ImGui_ImplVulkan_InitInfo initInfo = {};
+    initInfo.Instance                  = context_;
+    initInfo.PhysicalDevice            = context_;
+    initInfo.Device                    = context_;
+    initInfo.Queue                     = graphicsQueue_.queue;
+    initInfo.DescriptorPool            = imguiPool;
+    initInfo.MinImageCount             = 3;
+    initInfo.ImageCount                = 3;
+    initInfo.UseDynamicRendering       = true;
+
+    initInfo.PipelineRenderingCreateInfo                         = {};
+    initInfo.PipelineRenderingCreateInfo.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    initInfo.PipelineRenderingCreateInfo.colorAttachmentCount    = 1;
+    initInfo.PipelineRenderingCreateInfo.pColorAttachmentFormats = &swapchain_.imageFormat;
+
+    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+    ImGui_ImplVulkan_Init(&initInfo);
+    ImGui_ImplVulkan_CreateFontsTexture();
+
+    globalDeletionQueue_.push([=]() {
+        ImGui_ImplVulkan_Shutdown();
+        vkDestroyDescriptorPool(context_, imguiPool, nullptr);
+    });
+}
+
 void Engine::initSwapchain() {
     swapchain_ = Swapchain{context_, windowExtent_.width, windowExtent_.height};
 
@@ -144,6 +203,11 @@ void Engine::initCommands() {
         frame.commandPool.init(context_, graphicsQueue_.family, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         frame.mainCommandBuffer = frame.commandPool.createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
     }
+
+    immediateBuffer_.init(context_, graphicsQueue_.family);
+    globalDeletionQueue_.push([=, this]() {
+        immediateBuffer_.destroy(context_);
+    });
 }
 
 void Engine::initSyncStructures() {
@@ -151,6 +215,44 @@ void Engine::initSyncStructures() {
         frame.swapchainSemaphore.init(context_);
         frame.drawSemaphore.init(context_);
         frame.drawFence.init(context_, VK_FENCE_CREATE_SIGNALED_BIT);
+    }
+}
+
+void Engine::initDescriptors() {
+    std::vector<DescriptorAllocator::PoolSizeRatio> sizes =
+            {
+                    { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}
+            };
+
+    descriptorAllocator_.initPool(context_, 10, sizes);
+
+    // Compute layout
+    {
+        DescriptorSetBindings bindings;
+        bindings.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        drawImageDescriptorLayout_ = bindings.build(context_, VK_SHADER_STAGE_COMPUTE_BIT);
+
+        drawImageDescriptor_ = descriptorAllocator_.allocate(context_, drawImageDescriptorLayout_);
+
+        VkDescriptorImageInfo imgInfo{};
+        imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        imgInfo.imageView   = drawImage_.view_;
+
+        VkWriteDescriptorSet drawImageWrite = {};
+        drawImageWrite.sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        drawImageWrite.pNext                = nullptr;
+        drawImageWrite.dstBinding           = 0;
+        drawImageWrite.dstSet               = drawImageDescriptor_;
+        drawImageWrite.descriptorCount      = 1;
+        drawImageWrite.descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        drawImageWrite.pImageInfo           = &imgInfo;
+
+        vkUpdateDescriptorSets(context_, 1, &drawImageWrite, 0, nullptr);
+
+        globalDeletionQueue_.push([&]() {
+            descriptorAllocator_.destroyPool(context_);
+            vkDestroyDescriptorSetLayout(context_, drawImageDescriptorLayout_, nullptr);
+        });
     }
 }
 
@@ -176,7 +278,9 @@ void Engine::draw() {
 
     transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     copyImage(cmd, drawImage_.image_, swapchain_.images[swapchainImageIndex], drawExtent_, swapchain_.extent);
-    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    drawUI(cmd, swapchain_.imageViews[swapchainImageIndex]);
+    transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     endCommandBuffer(cmd);
 
@@ -209,9 +313,22 @@ void Engine::run() {
                 if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) { stopRendering_ = true; }
                 if (e.window.event == SDL_WINDOWEVENT_RESTORED) { stopRendering_ = false; }
             }
+
+            ImGui_ImplSDL2_ProcessEvent(&e);
         }
-        if (stopRendering_) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
-        else { draw(); }
+        if (stopRendering_) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        ImGui::ShowDemoWindow();
+        ImGui::Render();
+
+        draw();
     }
 }
 
@@ -225,42 +342,13 @@ void Engine::drawBackground(VkCommandBuffer cmd) const {
 
 }
 
-void Engine::initDescriptors() {
-    std::vector<DescriptorAllocator::PoolSizeRatio> sizes =
-    {
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}
-    };
+void Engine::drawUI(VkCommandBuffer cmd, VkImageView targetImageView) const {
+    auto colorAttachment = create::attachmentInfo(targetImageView, nullptr);
+    VkRenderingInfo renderInfo = create::renderingInfo(swapchain_.extent, &colorAttachment, nullptr);
 
-    descriptorAllocator_.initPool(context_, 10, sizes);
-
-    // Compute layout
-    {
-        DescriptorSetBindings bindings;
-        bindings.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        drawImageDescriptorLayout_ = bindings.build(context_, VK_SHADER_STAGE_COMPUTE_BIT);
-
-        drawImageDescriptor_ = descriptorAllocator_.allocate(context_, drawImageDescriptorLayout_);
-
-        VkDescriptorImageInfo imgInfo{};
-        imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        imgInfo.imageView   = drawImage_.view_;
-
-        VkWriteDescriptorSet drawImageWrite = {};
-        drawImageWrite.sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        drawImageWrite.pNext                = nullptr;
-        drawImageWrite.dstBinding           = 0;
-        drawImageWrite.dstSet               = drawImageDescriptor_;
-        drawImageWrite.descriptorCount      = 1;
-        drawImageWrite.descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        drawImageWrite.pImageInfo           = &imgInfo;
-
-        vkUpdateDescriptorSets(context_, 1, &drawImageWrite, 0, nullptr);
-
-        globalDeletionQueue_.push([&]() {
-            descriptorAllocator_.destroyPool(context_);
-            vkDestroyDescriptorSetLayout(context_, drawImageDescriptorLayout_, nullptr);
-        });
-    }
+    vkCmdBeginRendering(cmd, &renderInfo);
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+    vkCmdEndRendering(cmd);
 }
 
 #pragma endregion

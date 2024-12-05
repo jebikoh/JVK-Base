@@ -24,6 +24,8 @@ add_executable(JVK_Engine src/main.cpp
         src/vk/Descriptors.hpp
         src/vk/Descriptors.cpp
         src/Shaders.hpp
+        src/Immediate.hpp
+        src/vk/Render.hpp
 )
 
 add_subdirectory(include/vkbootstrap)
@@ -33,4 +35,20 @@ add_subdirectory(include/sdl EXCLUDE_FROM_ALL)
 #    target_link_libraries(JVK_Engine PRIVATE )
 #endif()
 
-target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL2 GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap)
+# ImGUI
+add_library(imgui STATIC)
+target_include_directories(imgui PUBLIC include/imgui)
+target_sources(imgui PRIVATE
+        include/imgui/imgui.h
+        include/imgui/imgui.cpp
+        include/imgui/imgui_demo.cpp
+        include/imgui/imgui_draw.cpp
+        include/imgui/imgui_widgets.cpp
+        include/imgui/imgui_tables.cpp
+        include/imgui/imgui_impl_vulkan.cpp
+        include/imgui/imgui_impl_sdl2.cpp
+)
+
+target_link_libraries(imgui PUBLIC Vulkan::Vulkan SDL2::SDL2)
+
+target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL2 GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap imgui)

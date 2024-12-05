@@ -11,6 +11,7 @@
 #include "vk/Descriptors.hpp"
 
 #include "DeletionStack.hpp"
+#include "Immediate.hpp"
 
 #include <SDL_vulkan.h>
 #include <vk_mem_alloc.h>
@@ -55,6 +56,7 @@ public:
     VkDescriptorSetLayout drawImageDescriptorLayout_;
 
     Queue graphicsQueue_;
+    ImmediateBuffer immediateBuffer_;
 
     void init();
     void destroy();
@@ -63,6 +65,7 @@ public:
 private:
     void initSDL();
     void initVulkan();
+    void initImGUI();
     void initSwapchain();
     void initCommands();
     void initSyncStructures();
@@ -70,5 +73,7 @@ private:
 
     // Flashing background
     void drawBackground(VkCommandBuffer cmd) const;
+    // ImGUI
+    void drawUI(VkCommandBuffer cmd, VkImageView targetImageView) const;
 };
 }// namespace jvk

@@ -42,7 +42,7 @@ void jvk::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout oldL
     vkCmdPipelineBarrier2(cmd, &depInfo);
 }
 
-VkImageCreateInfo jvk::create::imageCreateInfo(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent) {
+VkImageCreateInfo jvk::create::imageInfo(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent) {
     VkImageCreateInfo info = {};
     info.sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     info.pNext       = nullptr;
@@ -57,7 +57,7 @@ VkImageCreateInfo jvk::create::imageCreateInfo(VkFormat format, VkImageUsageFlag
     return info;
 }
 
-VkImageViewCreateInfo jvk::create::imageViewCreateInfo(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags) {
+VkImageViewCreateInfo jvk::create::imageViewInfo(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags) {
     VkImageViewCreateInfo info = {};
     info.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     info.pNext    = nullptr;
@@ -76,7 +76,7 @@ void jvk::Image::init(VkDevice device, jvk::Allocator &allocator, VkFormat forma
     format_ = format;
     extent_ = extent;
 
-    auto imageCreateInfo = create::imageCreateInfo(format_, usageFlags, extent_);
+    auto imageCreateInfo = create::imageInfo(format_, usageFlags, extent_);
 
     VmaAllocationCreateInfo imageAllocInfo = {};
     imageAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -84,7 +84,7 @@ void jvk::Image::init(VkDevice device, jvk::Allocator &allocator, VkFormat forma
     vmaCreateImage(allocator, &imageCreateInfo, &imageAllocInfo, &this->image_, &this->allocation_, nullptr);
 
     // Image view
-    auto imageViewCreateInfo = create::imageViewCreateInfo(this->format_, this->image_, VK_IMAGE_ASPECT_COLOR_BIT);
+    auto imageViewCreateInfo = create::imageViewInfo(this->format_, this->image_, VK_IMAGE_ASPECT_COLOR_BIT);
     VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &this->view_));
 }
 

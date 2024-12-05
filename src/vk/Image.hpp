@@ -25,8 +25,8 @@ public:
 };
 
 namespace create {
-    VkImageCreateInfo imageCreateInfo(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent);
-    VkImageViewCreateInfo imageViewCreateInfo(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags);
+    VkImageCreateInfo imageInfo(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent);
+    VkImageViewCreateInfo imageViewInfo(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags);
 }
 
 VkImageSubresourceRange imageSubresourceRange(VkImageAspectFlags aspectMask);
