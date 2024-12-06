@@ -23,9 +23,11 @@ add_executable(JVK_Engine src/main.cpp
         src/vk/Allocator.hpp
         src/vk/Descriptors.hpp
         src/vk/Descriptors.cpp
-        src/Shaders.hpp
+        src/vk/Shaders.hpp
         src/Immediate.hpp
         src/vk/Render.hpp
+        src/vk/Pipeline.hpp
+        src/vk/Pipeline.cpp
 )
 
 add_subdirectory(include/vkbootstrap)

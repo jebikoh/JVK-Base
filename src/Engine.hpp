@@ -58,6 +58,11 @@ public:
     Queue graphicsQueue_;
     ImmediateBuffer immediateBuffer_;
 
+    struct TrianglePipeline {
+        VkPipelineLayout layout;
+        VkPipeline       pipeline;
+    } trianglePipeline_;
+
     void init();
     void destroy();
     void draw();
@@ -70,6 +75,8 @@ private:
     void initCommands();
     void initSyncStructures();
     void initDescriptors();
+    void initPipelines();
+    void initTrianglePipeline();
 
     // Flashing background
     void drawBackground(VkCommandBuffer cmd) const;

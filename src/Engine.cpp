@@ -1,10 +1,11 @@
 #include "Engine.hpp"
 
 #include "vk/Commands.hpp"
-#include "vk/Image.hpp"
 #include "vk/Descriptors.hpp"
+#include "vk/Image.hpp"
 #include "vk/Render.hpp"
-#include "Shaders.hpp"
+#include "vk/Shaders.hpp"
+#include "vk/Pipeline.hpp"
 
 #include <SDL.h>
 #include <SDL_vulkan.h>
@@ -28,6 +29,7 @@ void Engine::init() {
     initCommands();
     initSyncStructures();
     initDescriptors();
+    initPipelines();
     initImGUI();
 
     isInit_ = true;
@@ -349,6 +351,48 @@ void Engine::drawUI(VkCommandBuffer cmd, VkImageView targetImageView) const {
     vkCmdBeginRendering(cmd, &renderInfo);
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
     vkCmdEndRendering(cmd);
+}
+
+void Engine::initPipelines() {
+    initTrianglePipeline();
+}
+
+void Engine::initTrianglePipeline() {
+    VkShaderModule fragShader;
+    VkShaderModule vertShader;
+
+    if (!loadShaderModule("../shaders/colored_triangle.vert.spv", context_, &vertShader)) {
+        std::cerr << "Failed to load vertex shader" << std::endl;
+    }
+    if (!loadShaderModule("../shaders/colored_triangle.frag.spv", context_, &fragShader)) {
+        std::cerr << "Failed to load fragment shader" << std::endl;
+    }
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = create::pipelineLayoutInfo();
+    VK_CHECK(vkCreatePipelineLayout(context_, &pipelineLayoutInfo, nullptr, &trianglePipeline_.layout));
+
+    PipelineBuilder builder;
+    builder.pipelineLayout_ = trianglePipeline_.layout;
+    builder.setShaders(vertShader, fragShader);
+    builder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    builder.setPolygonMode(VK_POLYGON_MODE_FILL);
+    builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    builder.setMultisamplingNone();
+    builder.disableBlending();
+    builder.disableDepthTest();
+
+    builder.setColorAttachmentFormat(drawImage_.format_);
+    builder.setDepthFormat(VK_FORMAT_UNDEFINED);
+
+    trianglePipeline_.pipeline = builder.buildPipeline(context_);
+
+    vkDestroyShaderModule(context_, fragShader, nullptr);
+    vkDestroyShaderModule(context_, vertShader, nullptr);
+
+    globalDeletionQueue_.push([=, this]() {
+        vkDestroyPipelineLayout(context_, trianglePipeline_.layout, nullptr);
+        vkDestroyPipeline(context_, trianglePipeline_.pipeline, nullptr);
+    });
 }
 
 #pragma endregion
