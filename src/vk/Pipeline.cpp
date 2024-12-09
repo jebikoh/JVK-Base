@@ -45,7 +45,7 @@ VkPipeline jvk::PipelineBuilder::buildPipeline(VkDevice device) {
     VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
     vertexInputInfo.sType                                = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    VkGraphicsPipelineCreateInfo pipelineInfo;
+    VkGraphicsPipelineCreateInfo pipelineInfo = {};
     pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.pNext               = &renderInfo_;
     pipelineInfo.stageCount          = (uint32_t) shaderStages_.size();

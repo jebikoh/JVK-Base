@@ -9,6 +9,7 @@
 #include "vk/Allocator.hpp"
 #include "vk/Image.hpp"
 #include "vk/Descriptors.hpp"
+#include "Mesh.hpp"
 
 #include "DeletionStack.hpp"
 #include "Immediate.hpp"
@@ -63,10 +64,19 @@ public:
         VkPipeline       pipeline;
     } trianglePipeline_;
 
+    // Mesh pipeline
+    struct MeshPipeline {
+        VkPipelineLayout layout;
+        VkPipeline       pipeline;
+    } meshPipeline_;
+    GPUMeshBuffers rectangle;
+
     void init();
     void destroy();
     void draw();
     void run();
+
+    GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 private:
     void initSDL();
     void initVulkan();
@@ -75,8 +85,13 @@ private:
     void initCommands();
     void initSyncStructures();
     void initDescriptors();
+
     void initPipelines();
     void initTrianglePipeline();
+    void initMeshPipeline();
+
+    // Dummy mesh
+    void initRectangle();
 
     // Flashing background
     void drawBackground(VkCommandBuffer cmd) const;

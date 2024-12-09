@@ -28,6 +28,9 @@ add_executable(JVK_Engine src/main.cpp
         src/vk/Render.hpp
         src/vk/Pipeline.hpp
         src/vk/Pipeline.cpp
+        src/vk/Buffer.hpp
+        src/Mesh.cpp
+        src/Mesh.hpp
 )
 
 add_subdirectory(include/vkbootstrap)
@@ -36,6 +39,10 @@ add_subdirectory(include/sdl EXCLUDE_FROM_ALL)
 #if(TARGET SDL2::SDL2main)
 #    target_link_libraries(JVK_Engine PRIVATE )
 #endif()
+
+# GLM
+add_library(glm INTERFACE)
+target_include_directories(glm INTERFACE include/glm)
 
 # ImGUI
 add_library(imgui STATIC)
