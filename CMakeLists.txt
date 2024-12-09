@@ -58,9 +58,12 @@ target_sources(imgui PRIVATE
         include/imgui/imgui_impl_sdl2.cpp
 )
 
+# FastGLTF
+add_subdirectory(include/fastgltf)
+
 target_link_libraries(imgui PUBLIC Vulkan::Vulkan SDL2::SDL2)
 
-target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL2 GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap imgui)
+target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL2 GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap imgui glm fastgltf::fastgltf)
 
 # Shaders
 find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)

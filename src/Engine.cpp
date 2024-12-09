@@ -15,6 +15,9 @@
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/transform.hpp>
+
 #include <iostream>
 #include <thread>
 
@@ -31,7 +34,7 @@ void Engine::init() {
     initDescriptors();
     initPipelines();
     initImGUI();
-    initRectangle();
+    initDummyData();
 
     isInit_ = true;
 }
@@ -273,9 +276,10 @@ void Engine::draw() {
 
     beginCommandBuffer(cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-    drawBackground(cmd);
-    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+//    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+//    drawBackground(cmd);
+    
+    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     drawGeometry(cmd);
 
     transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -424,19 +428,29 @@ void Engine::drawGeometry(VkCommandBuffer cmd) const {
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     // Draw triangle
-    vkCmdDraw(cmd, 3, 1, 0, 0);
+//    vkCmdDraw(cmd, 3, 1, 0, 0);
 
-    // Draw rectangle mesh
+    // Geometry
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline_.pipeline);
-
     GPUDrawPushConstants pushConstants;
-    pushConstants.worldMatrix = glm::mat4{1.0f};
-    pushConstants.vertexBufferAddress = rectangle.vertexBufferAddress;
+
+    // Draw rectangle
+//    pushConstants.worldMatrix = glm::mat4{1.0f};
+//    pushConstants.vertexBufferAddress = rectangle.vertexBufferAddress;
+//    vkCmdPushConstants(cmd, meshPipeline_.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+//    vkCmdBindIndexBuffer(cmd, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+//    vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+
+    // Draw scene
+    glm::mat4 view = glm::translate(glm::vec3{0, 0, -5});
+    glm::mat4 proj = glm::perspective(glm::radians(70.0f), (float) drawExtent_.width / (float) drawExtent_.height, 10000.0f, 0.1f);
+    proj[1][1] *= -1;
+    pushConstants.worldMatrix = proj * view;
+    pushConstants.vertexBufferAddress = scene[2]->gpuBuffers.vertexBufferAddress;
 
     vkCmdPushConstants(cmd, meshPipeline_.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-    vkCmdBindIndexBuffer(cmd, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-    vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+    vkCmdBindIndexBuffer(cmd, scene[2]->gpuBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(cmd, scene[2]->surfaces[0].count, 1, scene[2]->surfaces[0].startIndex, 0, 0);
 
     vkCmdEndRendering(cmd);
 }
@@ -529,7 +543,7 @@ void Engine::initMeshPipeline() {
     });
 }
 
-void Engine::initRectangle() {
+void Engine::initDummyData() {
     std::array<Vertex, 4> vertices{};
     vertices[0].position = {0.5, -0.5, 0};
     vertices[1].position = {0.5, 0.5, 0};
@@ -546,6 +560,13 @@ void Engine::initRectangle() {
     rectangle = uploadMesh(indices, vertices);
     globalDeletionQueue_.push([=, this]() {
         rectangle.destroy(allocator_);
+    });
+
+    scene = loadMeshes(this, "../assets/basicmesh.glb").value();
+    globalDeletionQueue_.push([=, this]() {
+        for (auto &mesh: scene) {
+            mesh->destroy(allocator_);
+        }
     });
 }
 

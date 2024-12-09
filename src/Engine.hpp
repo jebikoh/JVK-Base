@@ -59,17 +59,20 @@ public:
     Queue graphicsQueue_;
     ImmediateBuffer immediateBuffer_;
 
+    // Test triangle pipeline
     struct TrianglePipeline {
         VkPipelineLayout layout;
         VkPipeline       pipeline;
     } trianglePipeline_;
 
-    // Mesh pipeline
+    // Test rectangle mesh pipeline
     struct MeshPipeline {
         VkPipelineLayout layout;
         VkPipeline       pipeline;
     } meshPipeline_;
     GPUMeshBuffers rectangle;
+
+    std::vector<std::shared_ptr<Mesh>> scene;
 
     void init();
     void destroy();
@@ -91,7 +94,7 @@ private:
     void initMeshPipeline();
 
     // Dummy mesh
-    void initRectangle();
+    void initDummyData();
 
     // Flashing background
     void drawBackground(VkCommandBuffer cmd) const;

@@ -2,8 +2,11 @@
 
 #include "jvk.hpp"
 #include "vk/Buffer.hpp"
+#include <filesystem>
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
+#include <memory>
+#include <optional>
 
 
 namespace jvk {
@@ -32,5 +35,23 @@ struct GPUDrawPushConstants {
     VkDeviceAddress vertexBufferAddress;
 };
 
-}
+struct Surface {
+    uint32_t startIndex;
+    uint32_t count;
+};
 
+struct Mesh {
+    std::string name;
+    std::vector<Surface> surfaces;
+    GPUMeshBuffers gpuBuffers;
+
+    void destroy(VmaAllocator allocator) const {
+        gpuBuffers.destroy(allocator);
+    }
+};
+
+class Engine;
+
+std::optional<std::vector<std::shared_ptr<Mesh>>> loadMeshes(Engine *engine, std::filesystem::path filePath);
+
+}
