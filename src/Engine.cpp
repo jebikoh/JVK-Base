@@ -175,7 +175,7 @@ void Engine::initImGUI() {
     ImGui_ImplVulkan_Init(&initInfo);
     ImGui_ImplVulkan_CreateFontsTexture();
 
-    globalDeletionQueue_.push([=]() {
+    globalDeletionQueue_.push([=, this]() {
         ImGui_ImplVulkan_Shutdown();
         vkDestroyDescriptorPool(context_, imguiPool, nullptr);
     });
@@ -276,12 +276,16 @@ void Engine::draw() {
 
     transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     drawBackground(cmd);
-    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    drawGeometry(cmd);
 
+    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     copyImage(cmd, drawImage_.image_, swapchain_.images[swapchainImageIndex], drawExtent_, swapchain_.extent);
+
     transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     drawUI(cmd, swapchain_.imageViews[swapchainImageIndex]);
+
     transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     endCommandBuffer(cmd);
@@ -368,7 +372,7 @@ void Engine::initTrianglePipeline() {
         std::cerr << "Failed to load fragment shader" << std::endl;
     }
 
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = create::pipelineLayoutInfo();
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = create::pipelineLayout();
     VK_CHECK(vkCreatePipelineLayout(context_, &pipelineLayoutInfo, nullptr, &trianglePipeline_.layout));
 
     PipelineBuilder builder;
@@ -393,6 +397,33 @@ void Engine::initTrianglePipeline() {
         vkDestroyPipelineLayout(context_, trianglePipeline_.layout, nullptr);
         vkDestroyPipeline(context_, trianglePipeline_.pipeline, nullptr);
     });
+}
+
+void Engine::drawGeometry(VkCommandBuffer cmd) const {
+    VkRenderingAttachmentInfo colorAttachment = create::attachmentInfo(drawImage_.view_, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkRenderingInfo renderInfo = create::renderingInfo(drawExtent_, &colorAttachment, nullptr);
+    vkCmdBeginRendering(cmd, &renderInfo);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline_.pipeline);
+    VkViewport viewport = {};
+    viewport.x = 0;
+    viewport.y = 0;
+    viewport.width = drawExtent_.width;
+    viewport.height = drawExtent_.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    VkRect2D scissor = {};
+    scissor.offset.x = 0;
+    scissor.offset.y = 0;
+    scissor.extent.width = drawExtent_.width;
+    scissor.extent.height = drawExtent_.height;
+
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    vkCmdDraw(cmd, 3, 1, 0, 0);
+    vkCmdEndRendering(cmd);
 }
 
 #pragma endregion

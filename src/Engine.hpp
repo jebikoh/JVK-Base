@@ -82,5 +82,7 @@ private:
     void drawBackground(VkCommandBuffer cmd) const;
     // ImGUI
     void drawUI(VkCommandBuffer cmd, VkImageView targetImageView) const;
+    // Geometry
+    void drawGeometry(VkCommandBuffer cmd) const;
 };
 }// namespace jvk

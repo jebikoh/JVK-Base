@@ -5,7 +5,7 @@
 
 namespace jvk {
 
-bool loadShaderModule(const char *path, VkDevice device, VkShaderModule *outShaderModule) {
+inline bool loadShaderModule(const char *path, VkDevice device, VkShaderModule *outShaderModule) {
     std::ifstream file(path, std::ios::ate | std::ios::binary);
     if (!file.is_open()) { return false; }
 
@@ -31,7 +31,7 @@ bool loadShaderModule(const char *path, VkDevice device, VkShaderModule *outShad
 }
 
 namespace create {
-VkPipelineShaderStageCreateInfo pipelineShaderStageInfo(
+inline VkPipelineShaderStageCreateInfo pipelineShaderStage(
         VkShaderStageFlagBits stage,
         VkShaderModule shaderModule,
         const char *entry) {

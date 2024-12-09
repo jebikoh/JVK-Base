@@ -78,8 +78,8 @@ VkPipeline jvk::PipelineBuilder::buildPipeline(VkDevice device) {
 
 void jvk::PipelineBuilder::setShaders(VkShaderModule vertexShader, VkShaderModule fragmentShader) {
     shaderStages_.clear();
-    shaderStages_.push_back(create::pipelineShaderStageInfo(VK_SHADER_STAGE_VERTEX_BIT, vertexShader, "main"));
-    shaderStages_.push_back(create::pipelineShaderStageInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader, "main"));
+    shaderStages_.push_back(create::pipelineShaderStage(VK_SHADER_STAGE_VERTEX_BIT, vertexShader, "main"));
+    shaderStages_.push_back(create::pipelineShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader, "main"));
 }
 
 void jvk::PipelineBuilder::setInputTopology(VkPrimitiveTopology topology) {

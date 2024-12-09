@@ -33,7 +33,7 @@ public:
 };
 
 namespace create {
-VkPipelineLayoutCreateInfo pipelineLayoutInfo() {
+inline VkPipelineLayoutCreateInfo pipelineLayout() {
     VkPipelineLayoutCreateInfo info{};
     info.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     info.pNext                  = nullptr;
