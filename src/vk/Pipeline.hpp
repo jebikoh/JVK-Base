@@ -30,6 +30,7 @@ public:
     void setColorAttachmentFormat(VkFormat format);
     void setDepthFormat(VkFormat format);
     void disableDepthTest();
+    void enableDepthTest(bool depthWriteEnable, VkCompareOp op);
 };
 
 namespace create {

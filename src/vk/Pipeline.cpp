@@ -132,3 +132,16 @@ void jvk::PipelineBuilder::disableDepthTest() {
     depthStencil_.minDepthBounds        = 0.0f;
     depthStencil_.maxDepthBounds        = 1.0f;
 }
+
+void jvk::PipelineBuilder::enableDepthTest(const bool depthWriteEnable, VkCompareOp op) {
+    depthStencil_.depthTestEnable = VK_TRUE;
+    depthStencil_.depthWriteEnable = depthWriteEnable;
+    depthStencil_.depthCompareOp = op;
+    depthStencil_.depthBoundsTestEnable = VK_FALSE;
+    depthStencil_.stencilTestEnable     = VK_FALSE;
+    depthStencil_.front                 = {};
+    depthStencil_.back                  = {};
+    depthStencil_.minDepthBounds        = 0.0f;
+    depthStencil_.maxDepthBounds        = 1.0f;
+
+}

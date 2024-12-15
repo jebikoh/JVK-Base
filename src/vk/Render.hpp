@@ -4,11 +4,10 @@
 
 namespace jvk::create {
 
-VkRenderingAttachmentInfo attachmentInfo(
+inline VkRenderingAttachmentInfo attachmentInfo(
         VkImageView view,
         VkClearValue *clear,
-        VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        ) {
+        VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
     VkRenderingAttachmentInfo info{};
     info.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     info.pNext       = nullptr;
@@ -22,11 +21,23 @@ VkRenderingAttachmentInfo attachmentInfo(
     return info;
 }
 
-VkRenderingInfo renderingInfo(
+inline VkRenderingAttachmentInfo depthAttachmentInfo(VkImageView view, VkImageLayout layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    VkRenderingAttachmentInfo info{};
+    info.sType                         = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    info.pNext                         = nullptr;
+    info.imageView                     = view;
+    info.imageLayout                   = layout;
+    info.loadOp                        = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    info.storeOp                       = VK_ATTACHMENT_STORE_OP_STORE;
+    info.clearValue.depthStencil.depth = 1.0f;
+
+    return info;
+}
+
+inline VkRenderingInfo renderingInfo(
         VkExtent2D renderExtent,
         VkRenderingAttachmentInfo *colorAttachment,
-        VkRenderingAttachmentInfo *depthAttachment
-        ) {
+        VkRenderingAttachmentInfo *depthAttachment) {
     VkRenderingInfo info{};
     info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     info.pNext = nullptr;
@@ -41,4 +52,4 @@ VkRenderingInfo renderingInfo(
     return info;
 }
 
-}
+}// namespace jvk::create

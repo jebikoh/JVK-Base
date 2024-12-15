@@ -52,6 +52,7 @@ public:
     FrameData &getCurrentFrame() { return frames_[frameNumber_ % NUM_FRAMES]; }
 
     Image drawImage_;
+    Image depthImage_;
     VkExtent2D drawExtent_;
     VkDescriptorSet drawImageDescriptor_;
     VkDescriptorSetLayout drawImageDescriptorLayout_;
