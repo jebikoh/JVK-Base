@@ -60,18 +60,10 @@ public:
     Queue graphicsQueue_;
     ImmediateBuffer immediateBuffer_;
 
-    // Test triangle pipeline
-    struct TrianglePipeline {
-        VkPipelineLayout layout;
-        VkPipeline       pipeline;
-    } trianglePipeline_;
-
-    // Test rectangle mesh pipeline
     struct MeshPipeline {
         VkPipelineLayout layout;
         VkPipeline       pipeline;
     } meshPipeline_;
-    GPUMeshBuffers rectangle;
 
     std::vector<std::shared_ptr<Mesh>> scene;
 
@@ -91,7 +83,6 @@ private:
     void initDescriptors();
 
     void initPipelines();
-    void initTrianglePipeline();
     void initMeshPipeline();
 
     // Dummy mesh

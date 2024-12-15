@@ -370,46 +370,7 @@ void Engine::drawUI(VkCommandBuffer cmd, VkImageView targetImageView) const {
 }
 
 void Engine::initPipelines() {
-    initTrianglePipeline();
     initMeshPipeline();
-}
-
-void Engine::initTrianglePipeline() {
-    VkShaderModule fragShader;
-    VkShaderModule vertShader;
-
-    if (!loadShaderModule("../shaders/colored_triangle.vert.spv", context_, &vertShader)) {
-        std::cerr << "Failed to load vertex shader" << std::endl;
-    }
-    if (!loadShaderModule("../shaders/colored_triangle.frag.spv", context_, &fragShader)) {
-        std::cerr << "Failed to load fragment shader" << std::endl;
-    }
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = create::pipelineLayout();
-    VK_CHECK(vkCreatePipelineLayout(context_, &pipelineLayoutInfo, nullptr, &trianglePipeline_.layout));
-
-    PipelineBuilder builder;
-    builder.pipelineLayout_ = trianglePipeline_.layout;
-    builder.setShaders(vertShader, fragShader);
-    builder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    builder.setPolygonMode(VK_POLYGON_MODE_FILL);
-    builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-    builder.setMultisamplingNone();
-    builder.disableBlending();
-    builder.disableDepthTest();
-
-    builder.setColorAttachmentFormat(drawImage_.format_);
-    builder.setDepthFormat(depthImage_.format_);
-
-    trianglePipeline_.pipeline = builder.buildPipeline(context_);
-
-    vkDestroyShaderModule(context_, fragShader, nullptr);
-    vkDestroyShaderModule(context_, vertShader, nullptr);
-
-    globalDeletionQueue_.push([=, this]() {
-        vkDestroyPipelineLayout(context_, trianglePipeline_.layout, nullptr);
-        vkDestroyPipeline(context_, trianglePipeline_.pipeline, nullptr);
-    });
 }
 
 void Engine::drawGeometry(VkCommandBuffer cmd) const {
@@ -419,7 +380,7 @@ void Engine::drawGeometry(VkCommandBuffer cmd) const {
     vkCmdBeginRendering(cmd, &renderInfo);
 
     // Viewport & scissor
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline_.pipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline_.pipeline);
     VkViewport viewport = {};
     viewport.x          = 0;
     viewport.y          = 0;
@@ -438,19 +399,7 @@ void Engine::drawGeometry(VkCommandBuffer cmd) const {
 
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    // Draw triangle
-//    vkCmdDraw(cmd, 3, 1, 0, 0);
-
-    // Geometry
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline_.pipeline);
     GPUDrawPushConstants pushConstants;
-
-    // Draw rectangle
-//    pushConstants.worldMatrix = glm::mat4{1.0f};
-//    pushConstants.vertexBufferAddress = rectangle.vertexBufferAddress;
-//    vkCmdPushConstants(cmd, meshPipeline_.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-//    vkCmdBindIndexBuffer(cmd, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-//    vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
 
     // Draw scene
     glm::mat4 view = glm::translate(glm::vec3{0, 0, -5});
@@ -556,24 +505,6 @@ void Engine::initMeshPipeline() {
 }
 
 void Engine::initDummyData() {
-    std::array<Vertex, 4> vertices{};
-    vertices[0].position = {0.5, -0.5, 0};
-    vertices[1].position = {0.5, 0.5, 0};
-    vertices[2].position = {-0.5, -0.5, 0};
-    vertices[3].position = {-0.5, 0.5, 0};
-
-    vertices[0].color = {0, 0, 0, 1};
-    vertices[1].color = {0.5, 0.5, 0.5, 1};
-    vertices[2].color = {1, 0, 0, 1};
-    vertices[3].color = {0, 1, 0, 1};
-
-    std::array<uint32_t, 6> indices = {0, 1, 2, 2, 1, 3};
-
-    rectangle = uploadMesh(indices, vertices);
-    globalDeletionQueue_.push([=, this]() {
-        rectangle.destroy(allocator_);
-    });
-
     scene = loadMeshes(this, "../assets/basicmesh.glb").value();
     globalDeletionQueue_.push([=, this]() {
         for (const auto &mesh: scene) {
