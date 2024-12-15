@@ -199,13 +199,13 @@ void Engine::initSwapchain() {
     drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
     drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    drawImage_.init(context_, allocator_, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, drawImageExtent);
+    drawImage_.init(context_, allocator_, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, drawImageExtent, VK_IMAGE_ASPECT_COLOR_BIT);
 
     // Depth-image
     VkImageUsageFlags depthImageUsages{};
     depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-    depthImage_.init(context_, allocator_, VK_FORMAT_D32_SFLOAT, depthImageUsages, drawImageExtent);
+    depthImage_.init(context_, allocator_, VK_FORMAT_D32_SFLOAT, depthImageUsages, drawImageExtent, VK_IMAGE_ASPECT_DEPTH_BIT);
     globalDeletionQueue_.push([=, this]() {
         depthImage_.destroy(context_, allocator_);
         drawImage_.destroy(context_, allocator_);

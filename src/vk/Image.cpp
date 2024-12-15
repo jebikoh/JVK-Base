@@ -72,7 +72,7 @@ VkImageViewCreateInfo jvk::create::imageViewInfo(VkFormat format, VkImage image,
     return info;
 }
 
-void jvk::Image::init(VkDevice device, jvk::Allocator &allocator, VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent) {
+void jvk::Image::init(VkDevice device, jvk::Allocator &allocator, VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent, VkImageAspectFlags aspectFlags) {
     format_ = format;
     extent_ = extent;
 
@@ -84,7 +84,7 @@ void jvk::Image::init(VkDevice device, jvk::Allocator &allocator, VkFormat forma
     vmaCreateImage(allocator, &imageCreateInfo, &imageAllocInfo, &this->image_, &this->allocation_, nullptr);
 
     // Image view
-    auto imageViewCreateInfo = create::imageViewInfo(this->format_, this->image_, VK_IMAGE_ASPECT_COLOR_BIT);
+    auto imageViewCreateInfo = create::imageViewInfo(this->format_, this->image_, aspectFlags);
     VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &this->view_));
 }
 

@@ -18,7 +18,8 @@ public:
             Allocator &allocator,
             VkFormat format,
             VkImageUsageFlags usageFlags,
-            VkExtent3D extent
+            VkExtent3D extent,
+            VkImageAspectFlags aspectFlags
             );
 
     void destroy(VkDevice device, Allocator &allocator) const;
