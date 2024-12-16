@@ -110,6 +110,27 @@ void jvk::PipelineBuilder::disableBlending() {
     colorBlendAttachment_.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachment_.blendEnable    = VK_FALSE;
 }
+void jvk::PipelineBuilder::enableBlendingAdditive() {
+    colorBlendAttachment_.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment_.blendEnable   = VK_TRUE;
+    colorBlendAttachment_.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachment_.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment_.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment_.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment_.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment_.alphaBlendOp = VK_BLEND_OP_ADD;
+}
+
+void jvk::PipelineBuilder::enableBlendingAlphaBlend() {
+    colorBlendAttachment_.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment_.blendEnable   = VK_TRUE;
+    colorBlendAttachment_.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachment_.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment_.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment_.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment_.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment_.alphaBlendOp = VK_BLEND_OP_ADD;
+}
 
 void jvk::PipelineBuilder::setColorAttachmentFormat(VkFormat format) {
     colorAttachmentFormat_              = format;
