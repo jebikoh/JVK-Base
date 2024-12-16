@@ -62,7 +62,7 @@ void Engine::destroy() {
 void Engine::initSDL() {
     SDL_Init(SDL_INIT_VIDEO);
 
-    auto window_flags = (SDL_WindowFlags) (SDL_WINDOW_VULKAN);
+    auto window_flags = (SDL_WindowFlags) (SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     window_           = SDL_CreateWindow(
             "JVK Engine",
             SDL_WINDOWPOS_UNDEFINED,
@@ -212,6 +212,18 @@ void Engine::initSwapchain() {
     });
 }
 
+void Engine::resizeSwapchain() {
+    vkDeviceWaitIdle(context_);
+    swapchain_.destroy(context_);
+
+    int w, h;
+    SDL_GetWindowSize(window_, &w, &h);
+    windowExtent_ = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
+
+    swapchain_.init(context_, w, h);
+    windowResize_ = false;
+}
+
 void Engine::initCommands() {
     for (auto &frame: frames_) {
         frame.commandPool.init(context_, graphicsQueue_.family, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -275,26 +287,31 @@ void Engine::draw() {
     frame.deletionQueue.flush();
     frame.drawFence.reset(context_);
 
-    auto swapchainImageIndex = swapchain_.acquireNextImage(context_, frame.swapchainSemaphore);
+    uint32_t swapchainImageIndex;
+    if (const auto e = swapchain_.acquireNextImage(context_, frame.swapchainSemaphore, swapchainImageIndex); e == VK_ERROR_OUT_OF_DATE_KHR) {
+        windowResize_ = true;
+        return;
+    }
 
     VkCommandBuffer cmd = getCurrentFrame().mainCommandBuffer;
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-    drawExtent_.width  = drawImage_.extent_.width;
-    drawExtent_.height = drawImage_.extent_.height;
+    drawImageExtent_.height  = std::min(swapchain_.extent.height, drawImage_.extent_.width) * renderScale;
+    drawImageExtent_.width = std::min(swapchain_.extent.width, drawImage_.extent_.width) * renderScale;
 
     beginCommandBuffer(cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-//    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-//    drawBackground(cmd);
-    
-    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    drawBackground(cmd);
+
+    transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    // transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     transitionImage(cmd, depthImage_.image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
     drawGeometry(cmd);
 
     transitionImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyImage(cmd, drawImage_.image_, swapchain_.images[swapchainImageIndex], drawExtent_, swapchain_.extent);
+    copyImage(cmd, drawImage_.image_, swapchain_.images[swapchainImageIndex], drawImageExtent_, swapchain_.extent);
 
     transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     drawUI(cmd, swapchain_.imageViews[swapchainImageIndex]);
@@ -316,7 +333,9 @@ void Engine::draw() {
     presentInfo.pWaitSemaphores    = &frame.drawSemaphore.semaphore;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pImageIndices      = &swapchainImageIndex;
-    VK_CHECK(vkQueuePresentKHR(graphicsQueue_.queue, &presentInfo));
+    if (const auto presentResult = vkQueuePresentKHR(graphicsQueue_.queue, &presentInfo); presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
+        windowResize_ = true;
+    }
 
     frameNumber_++;
 }
@@ -340,11 +359,21 @@ void Engine::run() {
             continue;
         }
 
+        if (windowResize_) {
+            resizeSwapchain();
+        }
+
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::ShowDemoWindow();
+        // ImGui::ShowDemoWindow();
+
+        if (ImGui::Begin("Settings")) {
+            ImGui::SliderFloat("Render Scale", &renderScale, 0.3f, 1.0f);
+        }
+        ImGui::End();
+
         ImGui::Render();
 
         draw();
@@ -352,11 +381,8 @@ void Engine::run() {
 }
 
 void Engine::drawBackground(VkCommandBuffer cmd) const {
-    VkClearColorValue clearValue;
-    float flash = std::abs(std::sin(frameNumber_ / 120.f));
-    clearValue  = {{0.0f, 0.0f, flash, 1.0f}};
-
-    VkImageSubresourceRange clearRange = imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+    constexpr VkClearColorValue clearValue   = {{35.0f / 255.0f, 43.0f / 255.0f, 43.0f / 255.0f, 1.0f}};
+    const VkImageSubresourceRange clearRange = imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
     vkCmdClearColorImage(cmd, drawImage_.image_, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
 }
 
@@ -376,7 +402,7 @@ void Engine::initPipelines() {
 void Engine::drawGeometry(VkCommandBuffer cmd) const {
     VkRenderingAttachmentInfo colorAttachment = create::attachmentInfo(drawImage_.view_, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkRenderingAttachmentInfo depthAttachment = create::depthAttachmentInfo(depthImage_.view_, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-    VkRenderingInfo renderInfo                = create::renderingInfo(drawExtent_, &colorAttachment, &depthAttachment);
+    VkRenderingInfo renderInfo                = create::renderingInfo(drawImageExtent_, &colorAttachment, &depthAttachment);
     vkCmdBeginRendering(cmd, &renderInfo);
 
     // Viewport & scissor
@@ -384,8 +410,8 @@ void Engine::drawGeometry(VkCommandBuffer cmd) const {
     VkViewport viewport = {};
     viewport.x          = 0;
     viewport.y          = 0;
-    viewport.width      = drawExtent_.width;
-    viewport.height     = drawExtent_.height;
+    viewport.width      = drawImageExtent_.width;
+    viewport.height     = drawImageExtent_.height;
     viewport.minDepth   = 0.0f;
     viewport.maxDepth   = 1.0f;
 
@@ -394,8 +420,8 @@ void Engine::drawGeometry(VkCommandBuffer cmd) const {
     VkRect2D scissor      = {};
     scissor.offset.x      = 0;
     scissor.offset.y      = 0;
-    scissor.extent.width  = drawExtent_.width;
-    scissor.extent.height = drawExtent_.height;
+    scissor.extent.width  = drawImageExtent_.width;
+    scissor.extent.height = drawImageExtent_.height;
 
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
@@ -403,7 +429,7 @@ void Engine::drawGeometry(VkCommandBuffer cmd) const {
 
     // Draw scene
     glm::mat4 view = glm::translate(glm::vec3{0, 0, -5});
-    glm::mat4 proj = glm::perspective(glm::radians(70.0f), (float) drawExtent_.width / (float) drawExtent_.height, 0.1f , 10000.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(70.0f), (float) drawImageExtent_.width / (float) drawImageExtent_.height, 0.1f , 10000.0f);
     proj[1][1] *= -1;
     pushConstants.worldMatrix = proj * view;
     // pushConstants.worldMatrix = glm::mat4{1.0f};

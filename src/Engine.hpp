@@ -34,6 +34,7 @@ public:
 
     VkExtent2D  windowExtent_{1280, 720};
     SDL_Window* window_;
+    bool windowResize_;
 
     // Frame data
     struct FrameData {
@@ -53,9 +54,12 @@ public:
 
     Image drawImage_;
     Image depthImage_;
-    VkExtent2D drawExtent_;
+    VkExtent2D drawImageExtent_;
     VkDescriptorSet drawImageDescriptor_;
     VkDescriptorSetLayout drawImageDescriptorLayout_;
+
+    VkExtent2D drawExtent_;
+    float renderScale = 1.0f;
 
     Queue graphicsQueue_;
     ImmediateBuffer immediateBuffer_;
@@ -78,6 +82,7 @@ private:
     void initVulkan();
     void initImGUI();
     void initSwapchain();
+    void resizeSwapchain();
     void initCommands();
     void initSyncStructures();
     void initDescriptors();

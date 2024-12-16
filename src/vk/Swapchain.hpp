@@ -24,6 +24,17 @@ struct Swapchain {
               VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR,
               VkImageUsageFlags imageUsageFlags = VK_IMAGE_USAGE_TRANSFER_DST_BIT
               ) {
+        init(context, width, height, format, colorSpace, presentMode, imageUsageFlags);
+    }
+
+    void init(Context &context,
+              uint32_t width,
+              uint32_t height,
+              VkFormat format = VK_FORMAT_B8G8R8A8_UNORM,
+              VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+              VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR,
+              VkImageUsageFlags imageUsageFlags = VK_IMAGE_USAGE_TRANSFER_DST_BIT
+              ) {
         vkb::SwapchainBuilder builder{context.physicalDevice, context.device, context.surface};
 
         imageFormat = format;
@@ -51,10 +62,10 @@ struct Swapchain {
         for (auto & imageView : imageViews) vkDestroyImageView(context, imageView, nullptr);
     }
 
-    uint32_t acquireNextImage(Context &context, VkSemaphore semaphore, float timeout = 1000000000) const {
-        uint32_t imageIndex;
-        VK_CHECK(vkAcquireNextImageKHR(context, swapchain, timeout, semaphore, nullptr, &imageIndex));
-        return imageIndex;
+    VkResult acquireNextImage(const Context &context, VkSemaphore semaphore, uint32_t &imageIndex, const uint64_t timeout = 1000000000) const {
+        // uint32_t imageIndex;
+        return vkAcquireNextImageKHR(context, swapchain, timeout, semaphore, nullptr, &imageIndex);
+        // return imageIndex;
     }
 };
 
