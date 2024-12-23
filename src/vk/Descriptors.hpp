@@ -1,11 +1,12 @@
 #pragma once
 
 #include "../jvk.hpp"
+
+#include <deque>
 #include <span>
 
 namespace jvk {
-
-struct DescriptorSetBindings {
+struct DescriptorLayoutBindings {
     std::vector<VkDescriptorSetLayoutBinding> bindings;
 
     void addBinding(uint32_t binding, VkDescriptorType type) {
@@ -43,7 +44,18 @@ struct DescriptorSetBindings {
     }
 };
 
-// Improve this later
+struct DescriptorWriter {
+    std::deque<VkDescriptorImageInfo> images;
+    std::deque<VkDescriptorBufferInfo> buffers;
+    std::vector<VkWriteDescriptorSet> writes;
+
+    void writeImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
+    void writeBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
+
+    void clear();
+    void updateSet(VkDevice device, VkDescriptorSet set);
+};
+
 struct DescriptorAllocator {
     struct PoolSizeRatio {
         VkDescriptorType type;
@@ -59,4 +71,26 @@ struct DescriptorAllocator {
     VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout);
 };
 
-}
+class DynamicDescriptorAllocator {
+public:
+    struct PoolSizeRatio {
+        VkDescriptorType type;
+        float ratio;
+    };
+
+    void init(VkDevice device, uint32_t initialSets, std::span<PoolSizeRatio> poolRatios);
+    void clearPools(VkDevice device);
+    void destroyPools(VkDevice device);
+
+    VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout layout, void *pNext = nullptr);
+private:
+    std::vector<PoolSizeRatio> ratios_;
+    std::vector<VkDescriptorPool> full_;
+    std::vector<VkDescriptorPool> ready_;
+    uint32_t setsPerPool_ = 0;
+
+    VkDescriptorPool getPool(VkDevice device);
+    VkDescriptorPool createPool(VkDevice device, uint32_t setCount, std::span<PoolSizeRatio> poolRatios);
+};
+
+}// namespace jvk

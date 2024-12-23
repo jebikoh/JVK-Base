@@ -28,6 +28,13 @@ struct Buffer {
     void destroy(VmaAllocator allocator) const {
         vmaDestroyBuffer(allocator, buffer, allocation);
     }
+
+    VkDeviceAddress getDeviceAddress(const VkDevice device) const {
+        VkBufferDeviceAddressInfo info = {};
+        info.sType                     = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        info.buffer                    = buffer;
+        return vkGetBufferDeviceAddress(device, &info);
+    }
 };
 }
 

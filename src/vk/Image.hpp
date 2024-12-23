@@ -23,6 +23,9 @@ public:
             );
 
     void destroy(VkDevice device, Allocator &allocator) const;
+
+    operator VkImage() const { return image_; }
+    operator VkImageView() const { return view_; }
 };
 
 namespace create {

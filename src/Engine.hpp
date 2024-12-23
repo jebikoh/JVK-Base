@@ -46,6 +46,8 @@ public:
         Fence           drawFence;
         // Per-frame deletion queue
         DeletionStack deletionQueue;
+        // Descriptors
+        DynamicDescriptorAllocator descriptors;
     };
 
     size_t    frameNumber_ = 0;
@@ -71,6 +73,17 @@ public:
 
     std::vector<std::shared_ptr<Mesh>> scene;
 
+    struct GPUSceneData {
+        glm::mat4 view;
+        glm::mat4 proj;
+        glm::mat4 viewProj;
+        glm::vec4 ambientColor;
+        glm::vec4 sunlightDirection;
+        glm::vec4 sunlightColor;
+    };
+    GPUSceneData sceneData_;
+    VkDescriptorSetLayout gpuSceneDataLayout_;
+
     void init();
     void destroy();
     void draw();
@@ -93,11 +106,11 @@ private:
     // Dummy mesh
     void initDummyData();
 
-    // Flashing background
+    // Background clear
     void drawBackground(VkCommandBuffer cmd) const;
     // ImGUI
     void drawUI(VkCommandBuffer cmd, VkImageView targetImageView) const;
     // Geometry
-    void drawGeometry(VkCommandBuffer cmd) const;
+    void drawGeometry(VkCommandBuffer cmd);
 };
 }// namespace jvk

@@ -253,30 +253,45 @@ void Engine::initDescriptors() {
 
     // Compute layout
     {
-        DescriptorSetBindings bindings;
+        DescriptorLayoutBindings bindings;
         bindings.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
         drawImageDescriptorLayout_ = bindings.build(context_, VK_SHADER_STAGE_COMPUTE_BIT);
 
         drawImageDescriptor_ = descriptorAllocator_.allocate(context_, drawImageDescriptorLayout_);
 
-        VkDescriptorImageInfo imgInfo{};
-        imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        imgInfo.imageView   = drawImage_.view_;
-
-        VkWriteDescriptorSet drawImageWrite = {};
-        drawImageWrite.sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        drawImageWrite.pNext                = nullptr;
-        drawImageWrite.dstBinding           = 0;
-        drawImageWrite.dstSet               = drawImageDescriptor_;
-        drawImageWrite.descriptorCount      = 1;
-        drawImageWrite.descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        drawImageWrite.pImageInfo           = &imgInfo;
-
-        vkUpdateDescriptorSets(context_, 1, &drawImageWrite, 0, nullptr);
+        DescriptorWriter writer;
+        writer.writeImage(0, drawImage_, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        writer.updateSet(context_, drawImageDescriptor_);
 
         globalDeletionQueue_.push([&]() {
             descriptorAllocator_.destroyPool(context_);
             vkDestroyDescriptorSetLayout(context_, drawImageDescriptorLayout_, nullptr);
+        });
+
+        for (int i = 0; i < NUM_FRAMES; ++i) {
+            std::vector<DynamicDescriptorAllocator::PoolSizeRatio> frameSizes = {
+                    {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3},
+                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
+                    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
+                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
+            };
+
+            frames_[i].descriptors = DynamicDescriptorAllocator{};
+            frames_[i].descriptors.init(context_, 1000, frameSizes);
+
+            globalDeletionQueue_.push([&, i] {
+                frames_[i].descriptors.destroyPools(context_);
+            });
+        }
+    }
+
+    {
+        DescriptorLayoutBindings builder;
+        builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        gpuSceneDataLayout_ = builder.build(context_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+        globalDeletionQueue_.push([&] {
+            vkDestroyDescriptorSetLayout(context_, gpuSceneDataLayout_, nullptr);
         });
     }
 }
@@ -285,6 +300,7 @@ void Engine::draw() {
     auto &frame = this->getCurrentFrame();
     frame.drawFence.wait(context_);
     frame.deletionQueue.flush();
+    frame.descriptors.clearPools(context_);
     frame.drawFence.reset(context_);
 
     uint32_t swapchainImageIndex;
@@ -399,7 +415,7 @@ void Engine::initPipelines() {
     initMeshPipeline();
 }
 
-void Engine::drawGeometry(VkCommandBuffer cmd) const {
+void Engine::drawGeometry(VkCommandBuffer cmd) {
     VkRenderingAttachmentInfo colorAttachment = create::attachmentInfo(drawImage_.view_, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkRenderingAttachmentInfo depthAttachment = create::depthAttachmentInfo(depthImage_.view_, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
     VkRenderingInfo renderInfo                = create::renderingInfo(drawImageExtent_, &colorAttachment, &depthAttachment);
@@ -434,6 +450,19 @@ void Engine::drawGeometry(VkCommandBuffer cmd) const {
     pushConstants.worldMatrix = proj * view;
     // pushConstants.worldMatrix = glm::mat4{1.0f};
     pushConstants.vertexBufferAddress = scene[2]->gpuBuffers.vertexBufferAddress;
+
+    // BROKEN
+    // Buffer sceneDataBuffer = allocator_.createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    // getCurrentFrame().deletionQueue.push([=, this]() {
+    //     sceneDataBuffer.destroy(allocator_);
+    // });
+    // auto *sceneUniformData = reinterpret_cast<GPUSceneData *>(sceneDataBuffer.getDeviceAddress(context_));
+    // *sceneUniformData = sceneData_;
+    //
+    // VkDescriptorSet frameDescriptor = getCurrentFrame().descriptors.allocate(context_, gpuSceneDataLayout_);
+    // DescriptorWriter writer;
+    // writer.writeBuffer(0, sceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    // writer.updateSet(context_, frameDescriptor);
 
     vkCmdPushConstants(cmd, meshPipeline_.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
     vkCmdBindIndexBuffer(cmd, scene[2]->gpuBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
