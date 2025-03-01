@@ -2,6 +2,25 @@
 
 #include <jvk.hpp>
 
+struct FrameData {
+    // FRAME COMMANDS
+    VkCommandPool _commandPool;
+    VkCommandBuffer _mainCommandBuffer;
+
+    // FRAME SYNC
+    // Semaphores:
+    //  1. To have render commands wait on swapchain image request
+    //  2. Control presentation of rendered image to OS after draw
+    // Fences:
+    //  1. Wait for draw commands of a submitted cmd buffer to be finished
+    VkSemaphore _swapchainSemaphore;
+    VkSemaphore _renderSemaphore;
+    VkFence _renderFence;
+};
+
+constexpr unsigned int JVK_NUM_FRAMES = 2;
+
+
 class JVKEngine {
 public:
     bool _isInitialized = false;
@@ -22,6 +41,14 @@ public:
     std::vector<VkImage> _swapchainImages;
     std::vector<VkImageView> _swapchainImageViews;
     VkExtent2D _swapchainExtent;
+
+    // FRAME DATA
+    FrameData _frames[JVK_NUM_FRAMES];
+    FrameData &getCurrentFrame() { return _frames[_frameNumber % JVK_NUM_FRAMES]; }
+
+    // QUEUE
+    VkQueue _graphicsQueue;
+    uint32_t _graphicsQueueFamily;
 
     struct SDL_Window *_window = nullptr;
 
