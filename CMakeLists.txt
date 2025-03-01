@@ -6,31 +6,9 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(Vulkan REQUIRED)
 
 add_executable(JVK_Engine src/main.cpp
-        src/engine.cpp
-        src/engine.hpp
         src/jvk.hpp
-        src/vk/Swapchain.hpp
-        src/vk/Context.hpp
-        src/vk/Commands.hpp
-        src/vk/Commands.cpp
-        src/vk/Queue.hpp
-        src/vk/Fence.hpp
-        src/vk/Semaphore.hpp
-        src/vk/Image.cpp
-        src/vk/Image.hpp
-        src/DeletionStack.hpp
-        src/vk/Allocator.cpp
-        src/vk/Allocator.hpp
-        src/vk/Descriptors.hpp
-        src/vk/Descriptors.cpp
-        src/vk/Shaders.hpp
-        src/Immediate.hpp
-        src/vk/Render.hpp
-        src/vk/Pipeline.hpp
-        src/vk/Pipeline.cpp
-        src/vk/Buffer.hpp
-        src/Mesh.cpp
-        src/Mesh.hpp
+        src/engine.hpp
+        src/engine.cpp
 )
 
 add_subdirectory(include/vkbootstrap)
@@ -58,12 +36,28 @@ target_sources(imgui PRIVATE
         include/imgui/imgui_impl_sdl2.cpp
 )
 
+# FMT
+include(FetchContent)
+
+FetchContent_Declare(
+        fmt
+        GIT_REPOSITORY https://github.com/fmtlib/fmt
+        GIT_TAG        e69e5f977d458f2650bb346dadf2ad30c5320281) # 10.2.1
+FetchContent_MakeAvailable(fmt)
+
 # FastGLTF
 add_subdirectory(include/fastgltf)
 
+target_include_directories(JVK_Engine
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 target_link_libraries(imgui PUBLIC Vulkan::Vulkan SDL2::SDL2)
 
-target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL2 GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap imgui glm fastgltf::fastgltf)
+target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL2 GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap imgui glm fastgltf::fastgltf fmt::fmt)
+
+
 
 # Shaders
 find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)

@@ -1,15 +1,12 @@
-#include "Engine.hpp"
-#include <SDL2/SDL.h>
-#include <iostream>
-#include <thread>
-#include <vulkan/vulkan.h>
+#include <jvk.hpp>
+#include <engine.hpp>
 
 int main(int argc, char *argv[]) {
-    jvk::Engine engine;
+    JVKEngine engine;
 
     engine.init();
     engine.run();
-    engine.destroy();
+    engine.cleanup();
 
     return 0;
 }
