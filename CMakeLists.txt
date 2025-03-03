@@ -13,6 +13,8 @@ add_executable(JVK_Engine src/main.cpp
         src/vk_util.hpp
         src/vk_util.cpp
         src/vk_types.hpp
+        src/vk_descriptors.hpp
+        src/vk_descriptors.cpp
 )
 
 add_subdirectory(include/vkbootstrap)
