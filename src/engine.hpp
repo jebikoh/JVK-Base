@@ -1,6 +1,22 @@
 #pragma once
 
 #include <jvk.hpp>
+#include <stack>
+
+struct DeletionQueue {
+    std::stack<std::function<void()>> deletors;
+
+    void push(std::function<void()> && function) {
+        deletors.push(function);
+    }
+
+    void flush() {
+        while (!deletors.empty()) {
+            deletors.top()();
+            deletors.pop();
+        }
+    }
+};
 
 struct FrameData {
     // FRAME COMMANDS
@@ -16,10 +32,19 @@ struct FrameData {
     VkSemaphore _swapchainSemaphore;
     VkSemaphore _renderSemaphore;
     VkFence _renderFence;
+
+    DeletionQueue _deletionQueue;
 };
 
 constexpr unsigned int JVK_NUM_FRAMES = 2;
 
+struct AllocatedImage {
+    VkImage image;
+    VkImageView imageView;
+    VmaAllocation allocation;
+    VkExtent3D imageExtent;
+    VkFormat imageFormat;
+};
 
 class JVKEngine {
 public:
@@ -50,6 +75,14 @@ public:
     VkQueue _graphicsQueue;
     uint32_t _graphicsQueueFamily;
 
+    // MEMORY MANAGEMENT
+    DeletionQueue _globalDeletionQueue;
+    VmaAllocator _allocator;
+
+    // DRAW IMAGES
+    AllocatedImage _drawImage;
+    VkExtent2D _drawExtent;
+
     struct SDL_Window *_window = nullptr;
 
     static JVKEngine &get();
@@ -74,4 +107,7 @@ private:
 
     // DESTRUCTION
     void destroySwapchain();
+
+    // DRAW
+    void drawBackground(VkCommandBuffer cmd);
 };

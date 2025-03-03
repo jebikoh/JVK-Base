@@ -9,9 +9,10 @@ add_executable(JVK_Engine src/main.cpp
         src/jvk.hpp
         src/engine.hpp
         src/engine.cpp
-        src/vkinit.hpp
-        src/vkutil.hpp
-        src/vkutil.cpp
+        src/vk_init.hpp
+        src/vk_util.hpp
+        src/vk_util.cpp
+        src/vk_types.hpp
 )
 
 add_subdirectory(include/vkbootstrap)

@@ -1,7 +1,7 @@
 #include <engine.hpp>
 #include <jvk.hpp>
-#include <vkinit.hpp>
-#include <vkutil.hpp>
+#include <vk_init.hpp>
+#include <vk_util.hpp>
 
 #include <SDL.h>
 #include <SDL_vulkan.h>
@@ -10,6 +10,9 @@
 
 #include <chrono>
 #include <thread>
+
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
 
 constexpr bool JVK_USE_VALIDATION_LAYERS = true;
 
@@ -53,7 +56,15 @@ void JVKEngine::cleanup() {
             vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
             vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
             vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
+
+            _frames[i]._deletionQueue.flush();
         }
+
+        _globalDeletionQueue.flush();
+        vkDestroyImageView(_device, _drawImage.imageView, nullptr);
+        vmaDestroyImage(_allocator, _drawImage.image, _drawImage.allocation);
+
+        vmaDestroyAllocator(_allocator);
 
         destroySwapchain();
 
@@ -81,24 +92,30 @@ void JVKEngine::draw() {
     VkCommandBuffer cmd = getCurrentFrame()._mainCommandBuffer;
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
+    _drawExtent.width = _drawImage.imageExtent.width;
+    _drawExtent.height = _drawImage.imageExtent.height;
+
     // Start the command buffer
     VkCommandBufferBeginInfo cmdBeginInfo = VkInit::commandBufferBegin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
-    // Transition the image to a writeable layout
-    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    // Transition draw image to general
+    VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-    // 120-frame sine wave flash
-    VkClearColorValue clearValue;
-    float flash = std::abs(std::sin(_frameNumber / 120.0f));
-    clearValue  = {{0.0f, 0.0f, flash, 1.0f}};
+    // Draw
+    drawBackground(cmd);
 
-    // Clear image
-    VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-    vkCmdClearColorImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+    // Transition draw image to transfer source
+    VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-    // Transition image to present layout
-    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    // Transition swapchain image to transfer destination
+    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    // Copy image to from draw image to swapchain
+    VkUtil::copyImageToImage(cmd, _drawImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
+
+    // Transition swapchain for presentation
+    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     // End command buffer
     VK_CHECK(vkEndCommandBuffer(cmd));
@@ -211,10 +228,46 @@ void JVKEngine::initVulkan() {
     // QUEUE
     _graphicsQueue       = vkbDevice.get_queue(vkb::QueueType::graphics).value();
     _graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+    // VMA
+    VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.physicalDevice         = _chosenGPU;
+    allocatorInfo.device                 = _device;
+    allocatorInfo.instance               = _instance;
+    allocatorInfo.flags                  = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+    vmaCreateAllocator(&allocatorInfo, &_allocator);
 }
 
 void JVKEngine::initSwapchain() {
     createSwapchain(_windowExtent.width, _windowExtent.height);
+
+    // CREATE DRAW IMAGE
+    VkExtent3D drawImageExtent = {
+            _windowExtent.width,
+            _windowExtent.height,
+            1};
+
+    _drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;// 16-bit float image
+    _drawImage.imageExtent = drawImageExtent;
+
+    VkImageUsageFlags drawImageUsages = {};
+    drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // Copy from image
+    drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;    // Copy to image
+    drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;         // Allow compute shader to write
+    drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;// Graphics pipeline
+
+    VkImageCreateInfo drawImageInfo = VkInit::image(_drawImage.imageFormat, drawImageUsages, drawImageExtent);
+
+    // VMA_MEMORY_USAGE_GPU_ONLY: the texture will never be accessed from the CPU
+    // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT: GPU exclusive memory flag, guarantees that the memory is on the GPU
+    VmaAllocationCreateInfo drawImageAllocInfo = {};
+    drawImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
+    drawImageAllocInfo.requiredFlags           = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vmaCreateImage(_allocator, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
+
+    VkImageViewCreateInfo imageViewInfo = VkInit::imageView(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+    VK_CHECK(vkCreateImageView(_device, &imageViewInfo, nullptr, &_drawImage.imageView));
 }
 
 void JVKEngine::initCommands() {
@@ -274,4 +327,14 @@ void JVKEngine::destroySwapchain() {
     for (int i = 0; i < _swapchainImageViews.size(); ++i) {
         vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
     }
+}
+
+void JVKEngine::drawBackground(VkCommandBuffer cmd) {
+    VkClearColorValue clearValue;
+    float flash = std::abs(std::sin(_frameNumber / 120.0f));
+    clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+
+    VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+
+    vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
 }
