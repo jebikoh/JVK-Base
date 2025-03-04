@@ -1,6 +1,7 @@
 #include <engine.hpp>
 #include <jvk.hpp>
 #include <vk_init.hpp>
+#include <vk_pipelines.hpp>
 #include <vk_util.hpp>
 
 #include <SDL.h>
@@ -13,6 +14,10 @@
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
+
+#include <imgui.h>
+#include <imgui_impl_sdl2.h>
+#include <imgui_impl_vulkan.h>
 
 constexpr bool JVK_USE_VALIDATION_LAYERS = true;
 
@@ -42,6 +47,9 @@ void JVKEngine::init() {
     initSwapchain();
     initCommands();
     initSyncStructures();
+    initDescriptors();
+    initPipelines();
+    initImgui();
 
     _isInitialized = true;
 }
@@ -50,9 +58,11 @@ void JVKEngine::cleanup() {
     if (_isInitialized) {
         vkDeviceWaitIdle(_device);
 
+        // Frame data
         for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
             vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
 
+            // Frame sync
             vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
             vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
             vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
@@ -60,17 +70,38 @@ void JVKEngine::cleanup() {
             _frames[i]._deletionQueue.flush();
         }
 
+        // ImGui
+        ImGui_ImplVulkan_Shutdown();
+        vkDestroyDescriptorPool(_device, _imguiPool, nullptr);
+
+        // Immediate command pool
+        vkDestroyCommandPool(_device, _immCommandPool, nullptr);
+        vkDestroyFence(_device, _immFence, nullptr);
+
         _globalDeletionQueue.flush();
+
+        // Pipelines
+        vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
+        vkDestroyPipeline(_device, computeEffects[0].pipeline, nullptr);
+        vkDestroyPipeline(_device, computeEffects[1].pipeline, nullptr);
+
+        // Descriptors
+        _globalDescriptorAllocator.destroyPool(_device);
+        vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
+
+        // Draw image
         vkDestroyImageView(_device, _drawImage.imageView, nullptr);
         vmaDestroyImage(_allocator, _drawImage.image, _drawImage.allocation);
 
+        // VMA
         vmaDestroyAllocator(_allocator);
 
+        // Swapchain
         destroySwapchain();
 
+        // API
         vkDestroySurfaceKHR(_instance, _surface, nullptr);
         vkDestroyDevice(_device, nullptr);
-
         vkb::destroy_debug_utils_messenger(_instance, _debugMessenger);
         vkDestroyInstance(_instance, nullptr);
         SDL_DestroyWindow(_window);
@@ -92,7 +123,7 @@ void JVKEngine::draw() {
     VkCommandBuffer cmd = getCurrentFrame()._mainCommandBuffer;
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-    _drawExtent.width = _drawImage.imageExtent.width;
+    _drawExtent.width  = _drawImage.imageExtent.width;
     _drawExtent.height = _drawImage.imageExtent.height;
 
     // Start the command buffer
@@ -102,8 +133,17 @@ void JVKEngine::draw() {
     // Transition draw image to general
     VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-    // Draw
-    drawBackground(cmd);
+    ComputeEffect &effect = computeEffects[currentComputeEffect];
+
+    // Bind compute pipeline & descriptors
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, effect.pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
+
+    // Push constants for compute
+    vkCmdPushConstants(cmd, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
+
+    // Draw compute
+    vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0f), std::ceil(_drawExtent.height / 16.0f), 1);
 
     // Transition draw image to transfer source
     VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -114,8 +154,14 @@ void JVKEngine::draw() {
     // Copy image to from draw image to swapchain
     VkUtil::copyImageToImage(cmd, _drawImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
 
+    // Transition swapchain to attachment optimal
+    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    // Draw UI
+    drawImgui(cmd, _swapchainImageViews[swapchainImageIndex]);
+
     // Transition swapchain for presentation
-    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     // End command buffer
     VK_CHECK(vkEndCommandBuffer(cmd));
@@ -160,12 +206,36 @@ void JVKEngine::run() {
                     _stopRendering = false;
                 }
             }
+
+            ImGui_ImplSDL2_ProcessEvent(&e);
         }
 
         if (_stopRendering) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
+
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+
+        ImGui::NewFrame();
+
+        if (ImGui::Begin("computeEffects")) {
+
+            ComputeEffect& selected = computeEffects[currentComputeEffect];
+
+            ImGui::Text("Selected effect: ", selected.name);
+
+            ImGui::SliderInt("Effect Index", &currentComputeEffect,0, computeEffects.size() - 1);
+
+            ImGui::InputFloat4("data1",(float*)& selected.data.data1);
+            ImGui::InputFloat4("data2",(float*)& selected.data.data2);
+            ImGui::InputFloat4("data3",(float*)& selected.data.data3);
+            ImGui::InputFloat4("data4",(float*)& selected.data.data4);
+        }
+        ImGui::End();
+
+        ImGui::Render();
 
         draw();
     }
@@ -284,6 +354,11 @@ void JVKEngine::initCommands() {
 
         VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
     }
+
+    // IMMEDIATE BUFFERS
+    VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_immCommandPool));
+    VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBuffer(_immCommandPool, 1);
+    VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_immCommandBuffer));
 }
 
 void JVKEngine::initSyncStructures() {
@@ -300,6 +375,9 @@ void JVKEngine::initSyncStructures() {
         VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
         VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
     }
+
+    // IMMEDIATE SUBMIT FENCE
+    VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immFence));
 }
 
 void JVKEngine::createSwapchain(uint32_t width, uint32_t height) {
@@ -332,9 +410,192 @@ void JVKEngine::destroySwapchain() {
 void JVKEngine::drawBackground(VkCommandBuffer cmd) {
     VkClearColorValue clearValue;
     float flash = std::abs(std::sin(_frameNumber / 120.0f));
-    clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+    clearValue  = {{0.0f, 0.0f, flash, 1.0f}};
 
     VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
 
     vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+}
+
+void JVKEngine::initDescriptors() {
+    // POOL
+    std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}};
+    _globalDescriptorAllocator.initPool(_device, 10, sizes);
+
+    // LAYOUTS
+    {
+        DescriptorLayoutBuilder builder;
+        builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        _drawImageDescriptorLayout = builder.build(_device, VK_SHADER_STAGE_COMPUTE_BIT);
+    }
+
+    // SETS
+    // Allocate draw image descriptor
+    _drawImageDescriptors = _globalDescriptorAllocator.allocate(_device, _drawImageDescriptorLayout);
+
+    VkDescriptorImageInfo imgInfo{};
+    imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    imgInfo.imageView   = _drawImage.imageView;
+
+    VkWriteDescriptorSet drawImageWrite{};
+    drawImageWrite.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    drawImageWrite.pNext           = nullptr;
+    drawImageWrite.dstBinding      = 0;
+    drawImageWrite.dstSet          = _drawImageDescriptors;
+    drawImageWrite.descriptorCount = 1;
+    drawImageWrite.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    drawImageWrite.pImageInfo      = &imgInfo;
+    vkUpdateDescriptorSets(_device, 1, &drawImageWrite, 0, nullptr);
+}
+
+void JVKEngine::initPipelines() {
+    initBackgroundPipelines();
+}
+
+void JVKEngine::initBackgroundPipelines() {
+    // PIPELINE LAYOUT
+    // Pass an aray of descriptor set layouts, push constants, etc
+    VkPushConstantRange pushConstant{};
+    pushConstant.offset     = 0;
+    pushConstant.size       = sizeof(ComputePushConstants);
+    pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkPipelineLayoutCreateInfo layout{};
+    layout.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layout.pNext                  = nullptr;
+    layout.pSetLayouts            = &_drawImageDescriptorLayout;
+    layout.setLayoutCount         = 1;
+    layout.pPushConstantRanges    = &pushConstant;
+    layout.pushConstantRangeCount = 1;
+    VK_CHECK(vkCreatePipelineLayout(_device, &layout, nullptr, &_gradientPipelineLayout));
+
+    // PIPELINE STAGES (AND SHADERS)
+    VkShaderModule gradientShader;
+    if (!VkUtil::loadShaderModule("../shaders/gradient_pc.comp.spv", _device, &gradientShader)) {
+        fmt::print("Error when building gradient compute shader \n");
+    }
+
+    VkShaderModule skyShader;
+    if (!VkUtil::loadShaderModule("../shaders/sky.comp.spv", _device, &skyShader)) {
+        fmt::println("Error when building sky compute shader");
+    }
+
+    VkPipelineShaderStageCreateInfo stageInfo{};
+    stageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stageInfo.pNext  = nullptr;
+    stageInfo.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
+    stageInfo.module = gradientShader;
+    stageInfo.pName  = "main";
+
+    // CREATE GRADIENT PIPELINE
+    VkComputePipelineCreateInfo computeInfo{};
+    computeInfo.sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    computeInfo.pNext  = nullptr;
+    computeInfo.layout = _gradientPipelineLayout;
+    computeInfo.stage  = stageInfo;
+
+    ComputeEffect gradient;
+    gradient.layout = _gradientPipelineLayout;
+    gradient.name = "gradient";
+    gradient.data = {};
+    gradient.data.data1 = glm::vec4(1, 0, 0, 1);
+    gradient.data.data2 = glm::vec4(0, 0, 1, 1);
+
+    VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computeInfo, nullptr, &gradient.pipeline));
+
+    // CREATE SKY PIPELINE
+    computeInfo.stage.module = skyShader;
+
+    ComputeEffect sky;
+    sky.layout = _gradientPipelineLayout;
+    sky.name = "sky";
+    sky.data = {};
+    sky.data.data1 = glm::vec4(0.1, 0.2, 0.4 ,0.97);
+    VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computeInfo, nullptr, &sky.pipeline));
+
+    computeEffects.push_back(gradient);
+    computeEffects.push_back(sky);
+
+    vkDestroyShaderModule(_device, gradientShader, nullptr);
+    vkDestroyShaderModule(_device, skyShader, nullptr);
+}
+
+void JVKEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)> &&function) {
+    // Reset fence & buffer
+    VK_CHECK(vkResetFences(_device, 1, &_immFence));
+    VK_CHECK(vkResetCommandBuffer(_immCommandBuffer, 0));
+
+    // Create and start buffer
+    VkCommandBuffer cmd               = _immCommandBuffer;
+    VkCommandBufferBeginInfo cmdBegin = VkInit::commandBufferBegin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBegin));
+
+    // Record immediate submit commands
+    function(cmd);
+
+    // End buffer
+    VK_CHECK(vkEndCommandBuffer(cmd));
+
+    // Submit and wait for fence
+    VkCommandBufferSubmitInfo cmdInfo = VkInit::commandBufferSubmit(cmd);
+    VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, nullptr, nullptr);
+    VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immFence));
+    VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 9999999999));
+}
+
+void JVKEngine::initImgui() {
+    VkDescriptorPoolSize poolSizes[] = {{VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+                                        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+                                        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+                                        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+                                        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+                                        {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+                                        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+                                        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+                                        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+                                        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+                                        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.maxSets       = 1000;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(std::size(poolSizes));
+    poolInfo.pPoolSizes    = poolSizes;
+
+    VK_CHECK(vkCreateDescriptorPool(_device, &poolInfo, nullptr, &_imguiPool));
+
+    ImGui::CreateContext();
+    ImGui_ImplSDL2_InitForVulkan(_window);
+
+    ImGui_ImplVulkan_InitInfo initInfo{};
+    initInfo.Instance            = _instance;
+    initInfo.PhysicalDevice      = _chosenGPU;
+    initInfo.Device              = _device;
+    initInfo.Queue               = _graphicsQueue;
+    initInfo.DescriptorPool      = _imguiPool;
+    initInfo.MinImageCount       = 3;
+    initInfo.ImageCount          = 3;
+    initInfo.UseDynamicRendering = true;
+
+    initInfo.PipelineRenderingCreateInfo                         = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+    initInfo.PipelineRenderingCreateInfo.colorAttachmentCount    = 1;
+    initInfo.PipelineRenderingCreateInfo.pColorAttachmentFormats = &_swapchainImageFormat;
+
+    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+    ImGui_ImplVulkan_Init(&initInfo);
+    ImGui_ImplVulkan_CreateFontsTexture();
+}
+
+void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) {
+    // Setup color attachment for render pass
+    VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkRenderingInfo renderInfo                = VkInit::rendering(_swapchainExtent, &colorAttachment, nullptr);
+
+    // Render
+    vkCmdBeginRendering(cmd, &renderInfo);
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+    vkCmdEndRendering(cmd);
 }

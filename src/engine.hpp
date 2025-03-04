@@ -2,11 +2,26 @@
 
 #include <jvk.hpp>
 #include <stack>
+#include <vk_descriptors.hpp>
+
+struct ComputePushConstants {
+    glm::vec4 data1;
+    glm::vec4 data2;
+    glm::vec4 data3;
+    glm::vec4 data4;
+};
+
+struct ComputeEffect {
+    const char *name;
+    VkPipeline pipeline;
+    VkPipelineLayout layout;
+    ComputePushConstants data;
+};
 
 struct DeletionQueue {
     std::stack<std::function<void()>> deletors;
 
-    void push(std::function<void()> && function) {
+    void push(std::function<void()> &&function) {
         deletors.push(function);
     }
 
@@ -83,6 +98,25 @@ public:
     AllocatedImage _drawImage;
     VkExtent2D _drawExtent;
 
+    // DESCRIPTORS
+    DescriptorAllocator _globalDescriptorAllocator;
+    VkDescriptorSet _drawImageDescriptors;
+    VkDescriptorSetLayout _drawImageDescriptorLayout;
+
+    // PIPELINES
+    std::vector<ComputeEffect> computeEffects;
+    int currentComputeEffect{0};
+    VkPipeline _gradientPipeline;
+    VkPipelineLayout _gradientPipelineLayout;
+
+    // IMMEDIATE COMMANDS
+    VkFence _immFence;
+    VkCommandBuffer _immCommandBuffer;
+    VkCommandPool _immCommandPool;
+
+    // IMGUI
+    VkDescriptorPool _imguiPool;
+
     struct SDL_Window *_window = nullptr;
 
     static JVKEngine &get();
@@ -95,12 +129,17 @@ public:
 
     void run();
 
+    void immediateSubmit(std::function<void(VkCommandBuffer cmd)> && function);
+
 private:
     // INITIALIZATION
     void initVulkan();
     void initSwapchain();
     void initCommands();
     void initSyncStructures();
+    void initDescriptors();
+    void initPipelines();
+    void initImgui();
 
     // CREATION
     void createSwapchain(uint32_t width, uint32_t height);
@@ -110,4 +149,8 @@ private:
 
     // DRAW
     void drawBackground(VkCommandBuffer cmd);
+    void drawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
+
+    // PIPELINES
+    void initBackgroundPipelines();
 };

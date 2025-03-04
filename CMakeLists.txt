@@ -15,6 +15,8 @@ add_executable(JVK_Engine src/main.cpp
         src/vk_types.hpp
         src/vk_descriptors.hpp
         src/vk_descriptors.cpp
+        src/vk_pipelines.cpp
+        src/vk_pipelines.hpp
 )
 
 add_subdirectory(include/vkbootstrap)
@@ -68,10 +70,10 @@ target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL
 # Shaders
 find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
 
-file(GLOB_RECURSE GLSL_SOURCE_FILES
-        "${PROJECT_SOURCE_DIR}/shaders/*.frag"
-        "${PROJECT_SOURCE_DIR}/shaders/*.vert"
-        "${PROJECT_SOURCE_DIR}/shaders/*.comp"
+set(GLSL_SOURCE_FILES
+        "${PROJECT_SOURCE_DIR}/shaders/gradient.comp"
+        "${PROJECT_SOURCE_DIR}/shaders/gradient_pc.comp"
+        "${PROJECT_SOURCE_DIR}/shaders/sky.comp"
 )
 
 foreach(GLSL ${GLSL_SOURCE_FILES})
