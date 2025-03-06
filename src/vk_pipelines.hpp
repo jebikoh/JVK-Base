@@ -46,20 +46,9 @@ struct PipelineBuilder {
 
     // Depth testing
     void disableDepthTest();
+    void enableDepthTest(bool depthWriteEnable, VkCompareOp compareOp);
 
     VkPipeline buildPipeline(VkDevice device) const;
 };
-
-inline void PipelineBuilder::disableDepthTest() {
-    _depthStencil.depthTestEnable       = VK_FALSE;
-    _depthStencil.depthWriteEnable      = VK_FALSE;
-    _depthStencil.depthCompareOp        = VK_COMPARE_OP_NEVER;
-    _depthStencil.depthBoundsTestEnable = VK_FALSE;
-    _depthStencil.stencilTestEnable     = VK_FALSE;
-    _depthStencil.front                 = {};
-    _depthStencil.back                  = {};
-    _depthStencil.minDepthBounds        = 0.0f;
-    _depthStencil.maxDepthBounds        = 1.0f;
-}
 
 }// namespace VkUtil

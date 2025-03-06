@@ -13,11 +13,17 @@
 #include <thread>
 
 #define VMA_IMPLEMENTATION
+#include "vk_loader.hpp"
+
 #include <vk_mem_alloc.h>
 
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
+
+#define GLM_ENABLE_EXPERIMENTAL
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/gtx/transform.hpp>
 
 constexpr bool JVK_USE_VALIDATION_LAYERS = true;
 
@@ -72,6 +78,11 @@ void JVKEngine::cleanup() {
         }
 
         // Mesh data
+        for (const auto &mesh : testMeshes) {
+            destroyBuffer(mesh->meshBuffers.vertexBuffer);
+            destroyBuffer(mesh->meshBuffers.indexBuffer);
+        }
+
         destroyBuffer(rectangle.indexBuffer);
         destroyBuffer(rectangle.vertexBuffer);
 
@@ -99,6 +110,10 @@ void JVKEngine::cleanup() {
         // Descriptors
         _globalDescriptorAllocator.destroyPool(_device);
         vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
+
+        // Depth image
+        vkDestroyImageView(_device, _depthImage.imageView, nullptr);
+        vmaDestroyImage(_allocator, _depthImage.image, _depthImage.allocation);
 
         // Draw image
         vkDestroyImageView(_device, _drawImage.imageView, nullptr);
@@ -156,8 +171,9 @@ void JVKEngine::draw() {
     // Draw compute
     vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0f), std::ceil(_drawExtent.height / 16.0f), 1);
 
-    // Transition draw image for render pass
+    // Transition draw/depth images for render pass
     VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkUtil::transitionImage(cmd, _depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
     drawGeometry(cmd);
 
@@ -244,10 +260,10 @@ void JVKEngine::run() {
 
             ImGui::SliderInt("Effect Index", &currentComputeEffect, 0, computeEffects.size() - 1);
 
-            ImGui::InputFloat4("data1", (float *) &selected.data.data1);
-            ImGui::InputFloat4("data2", (float *) &selected.data.data2);
-            ImGui::InputFloat4("data3", (float *) &selected.data.data3);
-            ImGui::InputFloat4("data4", (float *) &selected.data.data4);
+            ImGui::InputFloat4("data1", reinterpret_cast<float *>(&selected.data.data1));
+            ImGui::InputFloat4("data2", reinterpret_cast<float *>(&selected.data.data2));
+            ImGui::InputFloat4("data3", reinterpret_cast<float *>(&selected.data.data3));
+            ImGui::InputFloat4("data4", reinterpret_cast<float *>(&selected.data.data4));
         }
         ImGui::End();
 
@@ -348,12 +364,25 @@ void JVKEngine::initSwapchain() {
     // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT: GPU exclusive memory flag, guarantees that the memory is on the GPU
     VmaAllocationCreateInfo drawImageAllocInfo = {};
     drawImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
-    drawImageAllocInfo.requiredFlags           = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    drawImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     vmaCreateImage(_allocator, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
 
     VkImageViewCreateInfo imageViewInfo = VkInit::imageView(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
     VK_CHECK(vkCreateImageView(_device, &imageViewInfo, nullptr, &_drawImage.imageView));
+
+    // CREATE DEPTH IMAGE
+    _depthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
+    _depthImage.imageExtent = drawImageExtent;
+
+    VkImageUsageFlags depthImageUsages{};
+    depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+    VkImageCreateInfo depthImageInfo = VkInit::image(_depthImage.imageFormat, depthImageUsages, drawImageExtent);
+    vmaCreateImage(_allocator, &depthImageInfo, &drawImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
+
+    VkImageViewCreateInfo depthImageViewInfo = VkInit::imageView(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+    VK_CHECK(vkCreateImageView(_device, &depthImageViewInfo, nullptr, &_depthImage.imageView));
 }
 
 void JVKEngine::initCommands() {
@@ -416,14 +445,14 @@ void JVKEngine::createSwapchain(uint32_t width, uint32_t height) {
     _swapchainImageViews = vkbSwapchain.get_image_views().value();
 }
 
-void JVKEngine::destroySwapchain() {
+void JVKEngine::destroySwapchain() const {
     vkDestroySwapchainKHR(_device, _swapchain, nullptr);
     for (int i = 0; i < _swapchainImageViews.size(); ++i) {
         vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
     }
 }
 
-void JVKEngine::drawBackground(VkCommandBuffer cmd) {
+void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
     VkClearColorValue clearValue;
     float flash = std::abs(std::sin(_frameNumber / 120.0f));
     clearValue  = {{0.0f, 0.0f, flash, 1.0f}};
@@ -539,7 +568,7 @@ void JVKEngine::initBackgroundPipelines() {
     vkDestroyShaderModule(_device, skyShader, nullptr);
 }
 
-void JVKEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)> &&function) {
+void JVKEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)> &&function) const {
     // Reset fence & buffer
     VK_CHECK(vkResetFences(_device, 1, &_immFence));
     VK_CHECK(vkResetCommandBuffer(_immCommandBuffer, 0));
@@ -607,7 +636,7 @@ void JVKEngine::initImgui() {
     ImGui_ImplVulkan_CreateFontsTexture();
 }
 
-void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) {
+void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) const {
     // Setup color attachment for render pass
     VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkRenderingInfo renderInfo                = VkInit::rendering(_swapchainExtent, &colorAttachment, nullptr);
@@ -643,9 +672,9 @@ void JVKEngine::initTrianglePipeline() {
     pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
     pipelineBuilder.setMultiSamplingNone();
     pipelineBuilder.disableBlending();
-    pipelineBuilder.disableDepthTest();
+    pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
     pipelineBuilder.setColorAttachmentFormat(_drawImage.imageFormat);
-    pipelineBuilder.setDepthAttachmentFormat(VK_FORMAT_UNDEFINED);
+    pipelineBuilder.setDepthAttachmentFormat(_depthImage.imageFormat);
     _trianglePipeline = pipelineBuilder.buildPipeline(_device);
 
     // CLEAN UP SHADER MODULES
@@ -685,24 +714,26 @@ void JVKEngine::initMeshPipeline() {
     builder.setPolygonMode(VK_POLYGON_MODE_FILL);
     builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
     builder.setMultiSamplingNone();
-    builder.disableDepthTest();
+    builder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
+    builder.disableBlending();
     builder.setColorAttachmentFormat(_drawImage.imageFormat);
-    builder.setDepthAttachmentFormat(VK_FORMAT_UNDEFINED);
+    builder.setDepthAttachmentFormat(_depthImage.imageFormat);
     _meshPipeline = builder.buildPipeline(_device);
 
     vkDestroyShaderModule(_device, triangleFragShader, nullptr);
     vkDestroyShaderModule(_device, triangleVertShader, nullptr);
 }
 
-void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
+void JVKEngine::drawGeometry(VkCommandBuffer cmd) const {
     // SETUP RENDER PASS
     VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    VkRenderingInfo renderingInfo             = VkInit::rendering(_drawExtent, &colorAttachment, nullptr);
+    VkRenderingAttachmentInfo depthAttachment = VkInit::depthRenderingAttachment(_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    VkRenderingInfo renderingInfo             = VkInit::rendering(_drawExtent, &colorAttachment, &depthAttachment);
 
     // BEGIN RENDER PASS
     vkCmdBeginRendering(cmd, &renderingInfo);
-    // BIND TRIANGLE PIPELINE
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
+    // BIND PIPELINE
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
 
     // VIEWPORT
     VkViewport viewport{};
@@ -722,12 +753,6 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     scissor.extent.height = _drawExtent.height;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    // DRAW 3 VERTICES
-    vkCmdDraw(cmd, 3, 1, 0, 0);
-
-    // BIND MESH PIPELINE
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
-
     // PUSH CONSTANTS
     GPUDrawPushConstants pushConstants;
     pushConstants.worldMatrix  = glm::mat4{1.0f};
@@ -738,10 +763,23 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     vkCmdBindIndexBuffer(cmd, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
 
+    // MONKEY HEAD
+    pushConstants.vertexBuffer = testMeshes[2]->meshBuffers.vertexBufferAddress;
+
+    glm::mat4 view = glm::translate(glm::vec3(0, 0, -5));
+    glm::mat4 proj = glm::perspective(glm::radians(70.0f), static_cast<float>(_drawExtent.width) / static_cast<float>(_drawExtent.height), 0.1f, 10000.0f);
+    proj[1][1] *= -1;
+    pushConstants.worldMatrix = proj * view;
+
+    vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+
+    vkCmdBindIndexBuffer(cmd, testMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(cmd, testMeshes[2]->surfaces[0].count, 1, testMeshes[2]->surfaces[0].startIndex, 0, 0);
+
     vkCmdEndRendering(cmd);
 }
 
-AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
+AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const {
     VkBufferCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     info.pNext = nullptr;
@@ -757,11 +795,11 @@ AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usa
     return buffer;
 }
 
-void JVKEngine::destroyBuffer(const AllocatedBuffer &buffer) {
+void JVKEngine::destroyBuffer(const AllocatedBuffer &buffer) const {
     vmaDestroyBuffer(_allocator, buffer.buffer, buffer.allocation);
 }
 
-GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
+GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const {
     const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
     const size_t indexBufferSize  = indices.size() * sizeof(uint32_t);
 
@@ -786,7 +824,7 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
 
     // COPY DATA TO STAGING BUFFER
     memcpy(data, vertices.data(), vertexBufferSize);
-    memcpy((char *) data + vertexBufferSize, indices.data(), indexBufferSize);
+    memcpy(static_cast<char *>(data) + vertexBufferSize, indices.data(), indexBufferSize);
 
     // COPY TO GPU BUFFER
     immediateSubmit([&](VkCommandBuffer cmd) {
@@ -832,4 +870,6 @@ void JVKEngine::initDefaultData() {
     indices[5] = 3;
 
     rectangle = uploadMesh(indices, vertices);
+
+    testMeshes = loadGltfMeshes(this, "../assets/basicmesh.glb").value();
 }

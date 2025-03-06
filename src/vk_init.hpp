@@ -135,6 +135,18 @@ inline VkRenderingAttachmentInfo renderingAttachment(VkImageView view, VkClearVa
     return info;
 }
 
+inline VkRenderingAttachmentInfo depthRenderingAttachment(VkImageView view, VkImageLayout layout) {
+    VkRenderingAttachmentInfo info{};
+    info.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    info.pNext       = nullptr;
+    info.imageView   = view;
+    info.imageLayout = layout;
+    info.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    info.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
+    info.clearValue.depthStencil.depth = 1.0f;
+    return info;
+}
+
 inline VkRenderingInfo rendering(VkExtent2D renderExtent, VkRenderingAttachmentInfo *colorAttachment, VkRenderingAttachmentInfo *depthAttachment) {
     VkRenderingInfo info{};
     info.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;

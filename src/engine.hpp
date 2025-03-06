@@ -1,10 +1,12 @@
 #pragma once
 
 #include <jvk.hpp>
-#include <vk_types.hpp>
 #include <stack>
 #include <vk_descriptors.hpp>
+#include <vk_types.hpp>
 
+
+struct MeshAsset;
 struct ComputePushConstants {
     glm::vec4 data1;
     glm::vec4 data2;
@@ -89,6 +91,7 @@ public:
 
     // DRAW IMAGES
     AllocatedImage _drawImage;
+    AllocatedImage _depthImage;
     VkExtent2D _drawExtent;
 
     // DESCRIPTORS
@@ -118,6 +121,7 @@ public:
 
     // MESHES
     GPUMeshBuffers rectangle;
+    std::vector<std::shared_ptr<MeshAsset>> testMeshes;
 
     struct SDL_Window *_window = nullptr;
 
@@ -131,8 +135,8 @@ public:
 
     void run();
 
-    void immediateSubmit(std::function<void(VkCommandBuffer cmd)> && function);
-
+    void immediateSubmit(std::function<void(VkCommandBuffer cmd)> && function) const;
+    GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 private:
     // INITIALIZATION
     void initVulkan();
@@ -147,12 +151,12 @@ private:
     void createSwapchain(uint32_t width, uint32_t height);
 
     // DESTRUCTION
-    void destroySwapchain();
+    void destroySwapchain() const;
 
     // DRAW
-    void drawBackground(VkCommandBuffer cmd);
-    void drawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
-    void drawGeometry(VkCommandBuffer cmd);
+    void drawBackground(VkCommandBuffer cmd) const;
+    void drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) const;
+    void drawGeometry(VkCommandBuffer cmd) const;
 
     // PIPELINES
     void initBackgroundPipelines();
@@ -160,10 +164,9 @@ private:
     void initMeshPipeline();
 
     // BUFFERS
-    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
-    void destroyBuffer(const AllocatedBuffer &buffer);
+    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
+    void destroyBuffer(const AllocatedBuffer &buffer) const;
 
     // Meshes
-    GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
     void initDefaultData();
 };
