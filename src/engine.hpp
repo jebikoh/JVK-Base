@@ -105,6 +105,9 @@ public:
     VkPipelineLayout _trianglePipelineLayout;
     VkPipeline _trianglePipeline;
 
+    VkPipelineLayout _meshPipelineLayout;
+    VkPipeline _meshPipeline;
+
     // IMMEDIATE COMMANDS
     VkFence _immFence;
     VkCommandBuffer _immCommandBuffer;
@@ -112,6 +115,9 @@ public:
 
     // IMGUI
     VkDescriptorPool _imguiPool;
+
+    // MESHES
+    GPUMeshBuffers rectangle;
 
     struct SDL_Window *_window = nullptr;
 
@@ -151,6 +157,7 @@ private:
     // PIPELINES
     void initBackgroundPipelines();
     void initTrianglePipeline();
+    void initMeshPipeline();
 
     // BUFFERS
     AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
@@ -158,4 +165,5 @@ private:
 
     // Meshes
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+    void initDefaultData();
 };

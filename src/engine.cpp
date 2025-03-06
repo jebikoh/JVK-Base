@@ -50,6 +50,7 @@ void JVKEngine::init() {
     initDescriptors();
     initPipelines();
     initImgui();
+    initDefaultData();
 
     _isInitialized = true;
 }
@@ -70,6 +71,10 @@ void JVKEngine::cleanup() {
             _frames[i]._deletionQueue.flush();
         }
 
+        // Mesh data
+        destroyBuffer(rectangle.indexBuffer);
+        destroyBuffer(rectangle.vertexBuffer);
+
         // ImGui
         ImGui_ImplVulkan_Shutdown();
         vkDestroyDescriptorPool(_device, _imguiPool, nullptr);
@@ -81,6 +86,9 @@ void JVKEngine::cleanup() {
         _globalDeletionQueue.flush();
 
         // Pipelines
+        vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
+        vkDestroyPipeline(_device, _meshPipeline, nullptr);
+
         vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
         vkDestroyPipeline(_device, _trianglePipeline, nullptr);
 
@@ -460,6 +468,7 @@ void JVKEngine::initDescriptors() {
 void JVKEngine::initPipelines() {
     initBackgroundPipelines();
     initTrianglePipeline();
+    initMeshPipeline();
 }
 
 void JVKEngine::initBackgroundPipelines() {
@@ -644,6 +653,47 @@ void JVKEngine::initTrianglePipeline() {
     vkDestroyShaderModule(_device, triangleFragShader, nullptr);
 }
 
+void JVKEngine::initMeshPipeline() {
+    // LOAD SHADER MODULES
+    VkShaderModule triangleFragShader;
+    if (!VkUtil::loadShaderModule("../shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
+        fmt::print("Error when building triangle fragment shader module");
+    }
+
+    VkShaderModule triangleVertShader;
+    if (!VkUtil::loadShaderModule("../shaders/colored_triangle_mesh.vert.spv", _device, &triangleVertShader)) {
+        fmt::print("Error when building triangle vertex shader module");
+    }
+
+    // PUSH CONSTANTS
+    VkPushConstantRange bufferRange{};
+    bufferRange.offset     = 0;
+    bufferRange.size       = sizeof(GPUDrawPushConstants);
+    bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    // CREATE PIPELINE LAYOUT
+    VkPipelineLayoutCreateInfo info = VkInit::pipelineLayout();
+    info.pPushConstantRanges        = &bufferRange;
+    info.pushConstantRangeCount     = 1;
+    VK_CHECK(vkCreatePipelineLayout(_device, &info, nullptr, &_meshPipelineLayout));
+
+    // CREATE PIPELINE
+    VkUtil::PipelineBuilder builder;
+    builder._pipelineLayout = _meshPipelineLayout;
+    builder.setShaders(triangleVertShader, triangleFragShader);
+    builder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    builder.setPolygonMode(VK_POLYGON_MODE_FILL);
+    builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+    builder.setMultiSamplingNone();
+    builder.disableDepthTest();
+    builder.setColorAttachmentFormat(_drawImage.imageFormat);
+    builder.setDepthAttachmentFormat(VK_FORMAT_UNDEFINED);
+    _meshPipeline = builder.buildPipeline(_device);
+
+    vkDestroyShaderModule(_device, triangleFragShader, nullptr);
+    vkDestroyShaderModule(_device, triangleVertShader, nullptr);
+}
+
 void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     // SETUP RENDER PASS
     VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -651,6 +701,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
     // BEGIN RENDER PASS
     vkCmdBeginRendering(cmd, &renderingInfo);
+    // BIND TRIANGLE PIPELINE
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
 
     // VIEWPORT
@@ -673,6 +724,20 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
     // DRAW 3 VERTICES
     vkCmdDraw(cmd, 3, 1, 0, 0);
+
+    // BIND MESH PIPELINE
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
+
+    // PUSH CONSTANTS
+    GPUDrawPushConstants pushConstants;
+    pushConstants.worldMatrix  = glm::mat4{1.0f};
+    pushConstants.vertexBuffer = rectangle.vertexBufferAddress;
+    vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+
+    // DRAW INDEXED
+    vkCmdBindIndexBuffer(cmd, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+
     vkCmdEndRendering(cmd);
 }
 
@@ -708,8 +773,8 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
 
     // Vertex buffer address
     VkBufferDeviceAddressInfo deviceAddressInfo{};
-    deviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    deviceAddressInfo.buffer = surface.vertexBuffer.buffer;
+    deviceAddressInfo.sType     = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    deviceAddressInfo.buffer    = surface.vertexBuffer.buffer;
     surface.vertexBufferAddress = vkGetBufferDeviceAddress(_device, &deviceAddressInfo);
 
     // Index buffer
@@ -717,30 +782,54 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
 
     // STAGING BUFFER
     AllocatedBuffer staging = createBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-    void *data = staging.allocation->GetMappedData();
+    void *data              = staging.allocation->GetMappedData();
 
     // COPY DATA TO STAGING BUFFER
     memcpy(data, vertices.data(), vertexBufferSize);
-    memcpy((char *)data + vertexBufferSize, indices.data(), indexBufferSize);
+    memcpy((char *) data + vertexBufferSize, indices.data(), indexBufferSize);
 
     // COPY TO GPU BUFFER
     immediateSubmit([&](VkCommandBuffer cmd) {
         // COPY VERTEX DATA
-       VkBufferCopy vertexCopy{0};
-       vertexCopy.dstOffset = 0;
-       vertexCopy.srcOffset = 0;
-       vertexCopy.size = vertexBufferSize;
-       vkCmdCopyBuffer(cmd, staging.buffer, surface.vertexBuffer.buffer, 1, &vertexCopy);
+        VkBufferCopy vertexCopy{0};
+        vertexCopy.dstOffset = 0;
+        vertexCopy.srcOffset = 0;
+        vertexCopy.size      = vertexBufferSize;
+        vkCmdCopyBuffer(cmd, staging.buffer, surface.vertexBuffer.buffer, 1, &vertexCopy);
 
         // COPY INDEX DATA
-       VkBufferCopy indexCopy{0};
-       indexCopy.dstOffset = 0;
-       indexCopy.srcOffset = vertexBufferSize;
-       indexCopy.size = indexBufferSize;
-       vkCmdCopyBuffer(cmd, staging.buffer, surface.indexBuffer.buffer, 1, &indexCopy);
+        VkBufferCopy indexCopy{0};
+        indexCopy.dstOffset = 0;
+        indexCopy.srcOffset = vertexBufferSize;
+        indexCopy.size      = indexBufferSize;
+        vkCmdCopyBuffer(cmd, staging.buffer, surface.indexBuffer.buffer, 1, &indexCopy);
     });
 
     // DESTROY STAGING BUFFER
     destroyBuffer(staging);
     return surface;
+}
+
+void JVKEngine::initDefaultData() {
+    std::array<Vertex, 4> vertices;
+    vertices[0].position = {0.5, -0.5, 0};
+    vertices[1].position = {0.5, 0.5, 0};
+    vertices[2].position = {-0.5, -0.5, 0};
+    vertices[3].position = {-0.5, 0.5, 0};
+
+    vertices[0].color = {0, 0, 0, 1};
+    vertices[1].color = {0.5, 0.5, 0.5, 1};
+    vertices[2].color = {1, 0, 0, 1};
+    vertices[3].color = {0, 1, 0, 1};
+
+    std::array<uint32_t, 6> indices;
+    indices[0] = 0;
+    indices[1] = 1;
+    indices[2] = 2;
+
+    indices[3] = 2;
+    indices[4] = 1;
+    indices[5] = 3;
+
+    rectangle = uploadMesh(indices, vertices);
 }
