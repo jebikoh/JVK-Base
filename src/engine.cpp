@@ -675,3 +675,72 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     vkCmdDraw(cmd, 3, 1, 0, 0);
     vkCmdEndRendering(cmd);
 }
+
+AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
+    VkBufferCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    info.pNext = nullptr;
+    info.size  = allocSize;
+    info.usage = usage;
+
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = memoryUsage;
+    allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    AllocatedBuffer buffer;
+    VK_CHECK(vmaCreateBuffer(_allocator, &info, &allocInfo, &buffer.buffer, &buffer.allocation, &buffer.info));
+    return buffer;
+}
+
+void JVKEngine::destroyBuffer(const AllocatedBuffer &buffer) {
+    vmaDestroyBuffer(_allocator, buffer.buffer, buffer.allocation);
+}
+
+GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
+    const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
+    const size_t indexBufferSize  = indices.size() * sizeof(uint32_t);
+
+    GPUMeshBuffers surface;
+
+    // CREATE BUFFERS
+    // Vertex buffer
+    surface.vertexBuffer = createBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+    // Vertex buffer address
+    VkBufferDeviceAddressInfo deviceAddressInfo{};
+    deviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    deviceAddressInfo.buffer = surface.vertexBuffer.buffer;
+    surface.vertexBufferAddress = vkGetBufferDeviceAddress(_device, &deviceAddressInfo);
+
+    // Index buffer
+    surface.indexBuffer = createBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+    // STAGING BUFFER
+    AllocatedBuffer staging = createBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+    void *data = staging.allocation->GetMappedData();
+
+    // COPY DATA TO STAGING BUFFER
+    memcpy(data, vertices.data(), vertexBufferSize);
+    memcpy((char *)data + vertexBufferSize, indices.data(), indexBufferSize);
+
+    // COPY TO GPU BUFFER
+    immediateSubmit([&](VkCommandBuffer cmd) {
+        // COPY VERTEX DATA
+       VkBufferCopy vertexCopy{0};
+       vertexCopy.dstOffset = 0;
+       vertexCopy.srcOffset = 0;
+       vertexCopy.size = vertexBufferSize;
+       vkCmdCopyBuffer(cmd, staging.buffer, surface.vertexBuffer.buffer, 1, &vertexCopy);
+
+        // COPY INDEX DATA
+       VkBufferCopy indexCopy{0};
+       indexCopy.dstOffset = 0;
+       indexCopy.srcOffset = vertexBufferSize;
+       indexCopy.size = indexBufferSize;
+       vkCmdCopyBuffer(cmd, staging.buffer, surface.indexBuffer.buffer, 1, &indexCopy);
+    });
+
+    // DESTROY STAGING BUFFER
+    destroyBuffer(staging);
+    return surface;
+}

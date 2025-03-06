@@ -76,6 +76,7 @@ set(GLSL_SOURCE_FILES
         "${PROJECT_SOURCE_DIR}/shaders/sky.comp"
         "${PROJECT_SOURCE_DIR}/shaders/colored_triangle.frag"
         "${PROJECT_SOURCE_DIR}/shaders/colored_triangle.vert"
+        "${PROJECT_SOURCE_DIR}/shaders/colored_triangle_mesh.vert"
 )
 
 foreach(GLSL ${GLSL_SOURCE_FILES})

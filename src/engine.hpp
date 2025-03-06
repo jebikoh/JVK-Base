@@ -1,6 +1,7 @@
 #pragma once
 
 #include <jvk.hpp>
+#include <vk_types.hpp>
 #include <stack>
 #include <vk_descriptors.hpp>
 
@@ -52,14 +53,6 @@ struct FrameData {
 };
 
 constexpr unsigned int JVK_NUM_FRAMES = 2;
-
-struct AllocatedImage {
-    VkImage image;
-    VkImageView imageView;
-    VmaAllocation allocation;
-    VkExtent3D imageExtent;
-    VkFormat imageFormat;
-};
 
 class JVKEngine {
 public:
@@ -158,4 +151,11 @@ private:
     // PIPELINES
     void initBackgroundPipelines();
     void initTrianglePipeline();
+
+    // BUFFERS
+    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+    void destroyBuffer(const AllocatedBuffer &buffer);
+
+    // Meshes
+    GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 };
