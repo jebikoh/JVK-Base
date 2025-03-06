@@ -150,11 +150,35 @@ inline VkRenderingInfo rendering(VkExtent2D renderExtent, VkRenderingAttachmentI
 
 inline VkPipelineShaderStageCreateInfo pipelineShaderStage(VkShaderStageFlagBits stage, VkShaderModule shader) {
     VkPipelineShaderStageCreateInfo info{};
-    info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    info.pNext = nullptr;
-    info.stage = stage;
+    info.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    info.pNext  = nullptr;
+    info.stage  = stage;
     info.module = shader;
-    info.pName = "main";
+    info.pName  = "main";
+    return info;
+}
+
+inline VkPipelineLayoutCreateInfo pipelineLayout() {
+    VkPipelineLayoutCreateInfo info{};
+    info.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    info.pNext                  = nullptr;
+    info.flags                  = 0;
+    info.setLayoutCount         = 0;
+    info.pSetLayouts            = nullptr;
+    info.pushConstantRangeCount = 0;
+    info.pPushConstantRanges    = nullptr;
+    return info;
+}
+
+inline VkPipelineLayoutCreateInfo pipelineLayout(VkDescriptorSetLayout *descriptorSetLayout, VkPushConstantRange *pushConstantRange) {
+    VkPipelineLayoutCreateInfo info{};
+    info.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    info.pNext                  = nullptr;
+    info.flags                  = 0;
+    info.setLayoutCount         = 1;
+    info.pSetLayouts            = descriptorSetLayout;
+    info.pushConstantRangeCount = 1;
+    info.pPushConstantRanges    = pushConstantRange;
     return info;
 }
 

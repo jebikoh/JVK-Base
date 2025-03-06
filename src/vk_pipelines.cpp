@@ -104,10 +104,11 @@ VkPipeline VkUtil::PipelineBuilder::buildPipeline(const VkDevice device) const {
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    VkGraphicsPipelineCreateInfo pipelineInfo;
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.pNext               = &_renderingInfo;
     pipelineInfo.stageCount          = static_cast<uint32_t>(_shaderStages.size());
+    pipelineInfo.pStages             = _shaderStages.data();
     pipelineInfo.pVertexInputState   = &vertexInputInfo;
     pipelineInfo.pInputAssemblyState = &_inputAssembly;
     pipelineInfo.pViewportState      = &viewportState;

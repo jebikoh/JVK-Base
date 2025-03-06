@@ -81,6 +81,9 @@ void JVKEngine::cleanup() {
         _globalDeletionQueue.flush();
 
         // Pipelines
+        vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
+        vkDestroyPipeline(_device, _trianglePipeline, nullptr);
+
         vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
         vkDestroyPipeline(_device, computeEffects[0].pipeline, nullptr);
         vkDestroyPipeline(_device, computeEffects[1].pipeline, nullptr);
@@ -145,8 +148,13 @@ void JVKEngine::draw() {
     // Draw compute
     vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0f), std::ceil(_drawExtent.height / 16.0f), 1);
 
+    // Transition draw image for render pass
+    VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    drawGeometry(cmd);
+
     // Transition draw image to transfer source
-    VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     // Transition swapchain image to transfer destination
     VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -222,16 +230,16 @@ void JVKEngine::run() {
 
         if (ImGui::Begin("computeEffects")) {
 
-            ComputeEffect& selected = computeEffects[currentComputeEffect];
+            ComputeEffect &selected = computeEffects[currentComputeEffect];
 
             ImGui::Text("Selected effect: ", selected.name);
 
-            ImGui::SliderInt("Effect Index", &currentComputeEffect,0, computeEffects.size() - 1);
+            ImGui::SliderInt("Effect Index", &currentComputeEffect, 0, computeEffects.size() - 1);
 
-            ImGui::InputFloat4("data1",(float*)& selected.data.data1);
-            ImGui::InputFloat4("data2",(float*)& selected.data.data2);
-            ImGui::InputFloat4("data3",(float*)& selected.data.data3);
-            ImGui::InputFloat4("data4",(float*)& selected.data.data4);
+            ImGui::InputFloat4("data1", (float *) &selected.data.data1);
+            ImGui::InputFloat4("data2", (float *) &selected.data.data2);
+            ImGui::InputFloat4("data3", (float *) &selected.data.data3);
+            ImGui::InputFloat4("data4", (float *) &selected.data.data4);
         }
         ImGui::End();
 
@@ -451,6 +459,7 @@ void JVKEngine::initDescriptors() {
 
 void JVKEngine::initPipelines() {
     initBackgroundPipelines();
+    initTrianglePipeline();
 }
 
 void JVKEngine::initBackgroundPipelines() {
@@ -496,9 +505,9 @@ void JVKEngine::initBackgroundPipelines() {
     computeInfo.stage  = stageInfo;
 
     ComputeEffect gradient;
-    gradient.layout = _gradientPipelineLayout;
-    gradient.name = "gradient";
-    gradient.data = {};
+    gradient.layout     = _gradientPipelineLayout;
+    gradient.name       = "gradient";
+    gradient.data       = {};
     gradient.data.data1 = glm::vec4(1, 0, 0, 1);
     gradient.data.data2 = glm::vec4(0, 0, 1, 1);
 
@@ -508,10 +517,10 @@ void JVKEngine::initBackgroundPipelines() {
     computeInfo.stage.module = skyShader;
 
     ComputeEffect sky;
-    sky.layout = _gradientPipelineLayout;
-    sky.name = "sky";
-    sky.data = {};
-    sky.data.data1 = glm::vec4(0.1, 0.2, 0.4 ,0.97);
+    sky.layout     = _gradientPipelineLayout;
+    sky.name       = "sky";
+    sky.data       = {};
+    sky.data.data1 = glm::vec4(0.1, 0.2, 0.4, 0.97);
     VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computeInfo, nullptr, &sky.pipeline));
 
     computeEffects.push_back(gradient);
@@ -597,5 +606,72 @@ void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) {
     // Render
     vkCmdBeginRendering(cmd, &renderInfo);
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+    vkCmdEndRendering(cmd);
+}
+
+void JVKEngine::initTrianglePipeline() {
+    // LOAD SHADER MODULES
+    VkShaderModule triangleFragShader;
+    if (!VkUtil::loadShaderModule("../shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
+        fmt::print("Error when building triangle fragment shader module");
+    }
+
+    VkShaderModule triangleVertShader;
+    if (!VkUtil::loadShaderModule("../shaders/colored_triangle.vert.spv", _device, &triangleVertShader)) {
+        fmt::print("Error when building triangle vertex shader module");
+    }
+
+    // CREATE PIPELINE LAYOUT
+    VkPipelineLayoutCreateInfo piplineLayoutInfo = VkInit::pipelineLayout();
+    VK_CHECK(vkCreatePipelineLayout(_device, &piplineLayoutInfo, nullptr, &_trianglePipelineLayout));
+
+    // CREATE PIPELINE
+    VkUtil::PipelineBuilder pipelineBuilder;
+    pipelineBuilder._pipelineLayout = _trianglePipelineLayout;
+    pipelineBuilder.setShaders(triangleVertShader, triangleFragShader);
+    pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+    pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+    pipelineBuilder.setMultiSamplingNone();
+    pipelineBuilder.disableBlending();
+    pipelineBuilder.disableDepthTest();
+    pipelineBuilder.setColorAttachmentFormat(_drawImage.imageFormat);
+    pipelineBuilder.setDepthAttachmentFormat(VK_FORMAT_UNDEFINED);
+    _trianglePipeline = pipelineBuilder.buildPipeline(_device);
+
+    // CLEAN UP SHADER MODULES
+    vkDestroyShaderModule(_device, triangleVertShader, nullptr);
+    vkDestroyShaderModule(_device, triangleFragShader, nullptr);
+}
+
+void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
+    // SETUP RENDER PASS
+    VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkRenderingInfo renderingInfo             = VkInit::rendering(_drawExtent, &colorAttachment, nullptr);
+
+    // BEGIN RENDER PASS
+    vkCmdBeginRendering(cmd, &renderingInfo);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
+
+    // VIEWPORT
+    VkViewport viewport{};
+    viewport.x        = 0;
+    viewport.y        = 0;
+    viewport.width    = _drawExtent.width;
+    viewport.height   = _drawExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    // SCISSOR
+    VkRect2D scissor{};
+    scissor.offset.x      = 0;
+    scissor.offset.y      = 0;
+    scissor.extent.width  = _drawExtent.width;
+    scissor.extent.height = _drawExtent.height;
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    // DRAW 3 VERTICES
+    vkCmdDraw(cmd, 3, 1, 0, 0);
     vkCmdEndRendering(cmd);
 }
