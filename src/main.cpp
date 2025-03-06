@@ -1,7 +1,8 @@
 #include <jvk.hpp>
 #include <engine.hpp>
+#include <SDL.h>
 
-int main(int argc, char *argv[]) {
+int main(int argv, char **args) {
     JVKEngine engine;
 
     engine.init();

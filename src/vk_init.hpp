@@ -148,4 +148,14 @@ inline VkRenderingInfo rendering(VkExtent2D renderExtent, VkRenderingAttachmentI
     return info;
 }
 
+inline VkPipelineShaderStageCreateInfo pipelineShaderStage(VkShaderStageFlagBits stage, VkShaderModule shader) {
+    VkPipelineShaderStageCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    info.pNext = nullptr;
+    info.stage = stage;
+    info.module = shader;
+    info.pName = "main";
+    return info;
+}
+
 }// namespace VkInit
