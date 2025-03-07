@@ -33,7 +33,7 @@ struct GLTFMetallicRoughness {
     DescriptorWriter writer;
 
     void buildPipelines(JVKEngine *engine);
-    void clearResources(VkDevice device);
+    void clearResources(VkDevice device) const;
 
     MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources &resources, DynamicDescriptorAllocator &descriptorAllocator);
 };
@@ -129,7 +129,7 @@ public:
     float renderScale = 1.0f;
 
     // DESCRIPTORS
-    DescriptorAllocator _globalDescriptorAllocator;
+    DynamicDescriptorAllocator _globalDescriptorAllocator;
     VkDescriptorSet _drawImageDescriptors;
     VkDescriptorSetLayout _drawImageDescriptorLayout;
 
@@ -170,6 +170,11 @@ public:
 
     VkDescriptorSetLayout _singleImageDescriptorLayout;
 
+    // MATERIALS
+    GLTFMetallicRoughness _metallicRoughnessMaterial;
+    MaterialInstance _defaultMaterialData;
+    AllocatedBuffer _matConstants;
+
     struct SDL_Window *_window = nullptr;
 
     static JVKEngine &get();
@@ -185,9 +190,9 @@ public:
     void immediateSubmit(std::function<void(VkCommandBuffer cmd)> && function) const;
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 
-    AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-    AllocatedImage createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-    void destroyImage(const AllocatedImage &img);
+    AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
+    AllocatedImage createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
+    void destroyImage(const AllocatedImage &img) const;
 private:
     bool _resizeRequested = false;
     void resizeSwapchain();

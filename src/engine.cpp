@@ -39,7 +39,7 @@ void JVKEngine::init() {
 
     SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_WindowFlags windowFlags = (SDL_WindowFlags) (SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+    SDL_WindowFlags windowFlags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
     _window = SDL_CreateWindow(
             "JVK",
@@ -87,12 +87,13 @@ void JVKEngine::cleanup() {
         destroyImage(_greyImage);
         destroyImage(_whiteImage);
 
-        // Mesh data
+        // Default data
+        _metallicRoughnessMaterial.clearResources(_device);
+        destroyBuffer(_matConstants);
         for (const auto &mesh: testMeshes) {
             destroyBuffer(mesh->meshBuffers.vertexBuffer);
             destroyBuffer(mesh->meshBuffers.indexBuffer);
         }
-
         destroyBuffer(rectangle.indexBuffer);
         destroyBuffer(rectangle.vertexBuffer);
 
@@ -118,7 +119,7 @@ void JVKEngine::cleanup() {
         vkDestroyPipeline(_device, computeEffects[1].pipeline, nullptr);
 
         // Descriptors
-        _globalDescriptorAllocator.destroyPool(_device);
+        _globalDescriptorAllocator.destroyPools(_device);
         vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
         vkDestroyDescriptorSetLayout(_device, _gpuSceneDataDescriptorLayout, nullptr);
         vkDestroyDescriptorSetLayout(_device, _singleImageDescriptorLayout, nullptr);
@@ -493,9 +494,13 @@ void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
 
 void JVKEngine::initDescriptors() {
     // GLOBAL DESCRIPTOR ALLOCATOR
-    std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
-            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}};
-    _globalDescriptorAllocator.initPool(_device, 10, sizes);
+    std::vector<DynamicDescriptorAllocator::PoolSizeRatio> sizes =
+    {
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 }
+    };
+
+    _globalDescriptorAllocator.init(_device, 10, sizes);
 
     // DRAW IMAGE
     // Layout
@@ -545,6 +550,7 @@ void JVKEngine::initPipelines() {
     initBackgroundPipelines();
     initTrianglePipeline();
     initMeshPipeline();
+    _metallicRoughnessMaterial.buildPipelines(this);
 }
 
 void JVKEngine::initBackgroundPipelines() {
@@ -764,7 +770,7 @@ void JVKEngine::initMeshPipeline() {
     builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
     builder.setMultiSamplingNone();
     builder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
-//    builder.enableBlendingAdditive();
+    //    builder.enableBlendingAdditive();
     builder.disableBlending();
     builder.setColorAttachmentFormat(_drawImage.imageFormat);
     builder.setDepthAttachmentFormat(_depthImage.imageFormat);
@@ -811,7 +817,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
     // UNIFORM BUFFERS
     AllocatedBuffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-    GPUSceneData *sceneUniformData     = (GPUSceneData *) gpuSceneDataBuffer.allocation->GetMappedData();
+    GPUSceneData *sceneUniformData     = static_cast<GPUSceneData *>(gpuSceneDataBuffer.allocation->GetMappedData());
     *sceneUniformData                  = sceneData;
 
     VkDescriptorSet globalDescriptor = getCurrentFrame()._frameDescriptors.allocate(_device, _gpuSceneDataDescriptorLayout);
@@ -975,6 +981,23 @@ void JVKEngine::initDefaultData() {
     sampler.magFilter = VK_FILTER_LINEAR;
     sampler.minFilter = VK_FILTER_LINEAR;
     vkCreateSampler(_device, &sampler, nullptr, &_defaultSamplerLinear);
+
+    // MATERIALS
+    GLTFMetallicRoughness::MaterialResources matResources;
+    matResources.colorImage               = _whiteImage;
+    matResources.colorSampler             = _defaultSamplerLinear;
+    matResources.metallicRoughnessImage   = _whiteImage;
+    matResources.metallicRoughnessSampler = _defaultSamplerLinear;
+
+    _matConstants = createBuffer(sizeof(GLTFMetallicRoughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    GLTFMetallicRoughness::MaterialConstants *sceneUniformData = static_cast<GLTFMetallicRoughness::MaterialConstants *>(_matConstants.allocation->GetMappedData());
+    sceneUniformData->colorFactors = glm::vec4{1, 1, 1, 1};
+    sceneUniformData->metallicRoughnessFactors = glm::vec4{1, 0.5, 0, 0};
+
+    matResources.dataBuffer = _matConstants.buffer;
+    matResources.dataBufferOffset = 0;
+
+    _defaultMaterialData = _metallicRoughnessMaterial.writeMaterial(_device, MaterialPass::MAIN_COLOR, matResources,  _globalDescriptorAllocator);
 }
 
 void JVKEngine::resizeSwapchain() {
@@ -990,7 +1013,7 @@ void JVKEngine::resizeSwapchain() {
     _resizeRequested = false;
 }
 
-AllocatedImage JVKEngine::createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
+AllocatedImage  JVKEngine::createImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
     // IMAGE
     AllocatedImage image;
     image.imageFormat           = format;
@@ -1003,7 +1026,7 @@ AllocatedImage JVKEngine::createImage(VkExtent3D size, VkFormat format, VkImageU
     // ALLOCATE
     VmaAllocationCreateInfo allocInfo{};
     allocInfo.usage         = VMA_MEMORY_USAGE_GPU_ONLY;
-    allocInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    allocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     VK_CHECK(vmaCreateImage(_allocator, &imageInfo, &allocInfo, &image.image, &image.allocation, nullptr));
 
     // DEPTH
@@ -1020,7 +1043,7 @@ AllocatedImage JVKEngine::createImage(VkExtent3D size, VkFormat format, VkImageU
     return image;
 }
 
-AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
+AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) const {
     // STAGING BUFFER
     size_t dataSize              = size.depth * size.width * size.height * 4;
     AllocatedBuffer uploadBuffer = createBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -1049,7 +1072,7 @@ AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat form
     destroyBuffer(uploadBuffer);
     return image;
 }
-void JVKEngine::destroyImage(const AllocatedImage &img) {
+void JVKEngine::destroyImage(const AllocatedImage &img) const {
     vkDestroyImageView(_device, img.imageView, nullptr);
     vmaDestroyImage(_allocator, img.image, img.allocation);
 }
@@ -1067,8 +1090,8 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
 
     // PUSH CONSTANTS
     VkPushConstantRange matrixRange{};
-    matrixRange.offset = 0;
-    matrixRange.size = sizeof(GPUDrawPushConstants);
+    matrixRange.offset     = 0;
+    matrixRange.size       = sizeof(GPUDrawPushConstants);
     matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     // DESCRIPTOR LAYOUT
@@ -1078,19 +1101,19 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     materialDescriptorLayout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     // _gpuSceneDataDescriptorLayout is used as our global descriptor layout
-    VkDescriptorSetLayout layouts[] = { engine->_gpuSceneDataDescriptorLayout, materialDescriptorLayout};
+    VkDescriptorSetLayout layouts[] = {engine->_gpuSceneDataDescriptorLayout, materialDescriptorLayout};
 
     // PIPELINE LAYOUT
     VkPipelineLayoutCreateInfo layoutInfo = VkInit::pipelineLayout();
-    layoutInfo.setLayoutCount = 2;
-    layoutInfo.pSetLayouts = layouts;
-    layoutInfo.pPushConstantRanges = &matrixRange;
-    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.setLayoutCount             = 2;
+    layoutInfo.pSetLayouts                = layouts;
+    layoutInfo.pPushConstantRanges        = &matrixRange;
+    layoutInfo.pushConstantRangeCount     = 1;
 
     VkPipelineLayout layout;
     VK_CHECK(vkCreatePipelineLayout(engine->_device, &layoutInfo, nullptr, &layout));
 
-    opaquePipeline.pipelineLayout = layout;
+    opaquePipeline.pipelineLayout      = layout;
     transparentPipeline.pipelineLayout = layout;
 
     // PIPELINE
@@ -1115,4 +1138,29 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
 
     vkDestroyShaderModule(engine->_device, vertShader, nullptr);
     vkDestroyShaderModule(engine->_device, fragShader, nullptr);
+}
+
+MaterialInstance GLTFMetallicRoughness::writeMaterial(const VkDevice device, const MaterialPass pass, const MaterialResources &resources, DynamicDescriptorAllocator &descriptorAllocator) {
+    MaterialInstance matData;
+    matData.passType = pass;
+    if (pass == MaterialPass::TRANSPARENT) {
+        matData.pipeline = &transparentPipeline;
+    } else {
+        matData.pipeline = &opaquePipeline;
+    }
+    matData.materialSet = descriptorAllocator.allocate(device, materialDescriptorLayout);
+
+    writer.clear();
+    writer.writeBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    writer.writeImage(1, resources.colorImage.imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    writer.writeImage(2, resources.metallicRoughnessImage.imageView, resources.metallicRoughnessSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    writer.updateSet(device, matData.materialSet);
+
+    return matData;
+}
+
+void GLTFMetallicRoughness::clearResources(const VkDevice device) const {
+    vkDestroyDescriptorSetLayout(device, materialDescriptorLayout, nullptr);
+    opaquePipeline.destroy(device, true);
+    transparentPipeline.destroy(device);
 }

@@ -80,6 +80,8 @@ set(GLSL_SOURCE_FILES
         "${PROJECT_SOURCE_DIR}/shaders/colored_triangle.vert"
         "${PROJECT_SOURCE_DIR}/shaders/colored_triangle_mesh.vert"
         "${PROJECT_SOURCE_DIR}/shaders/tex_image.frag"
+        "${PROJECT_SOURCE_DIR}/shaders/mesh.frag"
+        "${PROJECT_SOURCE_DIR}/shaders/mesh.vert"
 )
 
 foreach(GLSL ${GLSL_SOURCE_FILES})

@@ -54,10 +54,21 @@ enum class MaterialPass : uint8_t {
 struct MaterialPipeline {
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
+
+    void destroy(const VkDevice device, const bool destroyLayout = false) const {
+        if (destroyLayout) {
+            vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        }
+        vkDestroyPipeline(device, pipeline, nullptr);
+    }
 };
 
 struct MaterialInstance {
     MaterialPipeline *pipeline;
     VkDescriptorSet materialSet;
     MaterialPass passType;
+
+    void destroy(const VkDevice device, const bool destroyLayout = false) const {
+        pipeline->destroy(device);
+    }
 };
