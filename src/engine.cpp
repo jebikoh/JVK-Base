@@ -715,7 +715,7 @@ void JVKEngine::initMeshPipeline() {
     builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
     builder.setMultiSamplingNone();
     builder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
-    builder.disableBlending();
+    builder.enableBlendingAdditive();
     builder.setColorAttachmentFormat(_drawImage.imageFormat);
     builder.setDepthAttachmentFormat(_depthImage.imageFormat);
     _meshPipeline = builder.buildPipeline(_device);
@@ -850,10 +850,10 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
 
 void JVKEngine::initDefaultData() {
     std::array<Vertex, 4> vertices;
-    vertices[0].position = {0.5, -0.5, 0};
-    vertices[1].position = {0.5, 0.5, 0};
-    vertices[2].position = {-0.5, -0.5, 0};
-    vertices[3].position = {-0.5, 0.5, 0};
+    vertices[0].position = {0.5, -0.5, 1};
+    vertices[1].position = {0.5, 0.5, 1};
+    vertices[2].position = {-0.5, -0.5, 1};
+    vertices[3].position = {-0.5, 0.5, 1};
 
     vertices[0].color = {0, 0, 0, 1};
     vertices[1].color = {0.5, 0.5, 0.5, 1};

@@ -39,6 +39,8 @@ struct PipelineBuilder {
 
     // Blending
     void disableBlending();
+    void enableBlendingAdditive();
+    void enableBlendingAlphaBlend();
 
     // Attachments
     void setColorAttachmentFormat(VkFormat format);
