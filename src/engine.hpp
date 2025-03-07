@@ -1,11 +1,35 @@
 #pragma once
 
+#include "vk_loader.hpp"
+
+
 #include <jvk.hpp>
 #include <stack>
 #include <vk_descriptors.hpp>
 #include <vk_types.hpp>
 
 class JVKEngine;
+
+struct RenderObject {
+    uint32_t indexCount;
+    uint32_t firstIndex;
+    VkBuffer indexBuffer;
+
+    MaterialInstance *material;
+
+    glm::mat4 transform;
+    VkDeviceAddress vertexBufferAddress;
+};
+
+struct DrawContext {
+    std::vector<RenderObject> opaqueSurfaces;
+};
+
+struct MeshNode : public Node {
+    std::shared_ptr<MeshAsset> mesh;
+
+    virtual void draw(const glm::mat4 &topMatrix, DrawContext &ctx) override;
+};
 
 struct GLTFMetallicRoughness {
     MaterialPipeline opaquePipeline;
@@ -175,6 +199,10 @@ public:
     MaterialInstance _defaultMaterialData;
     AllocatedBuffer _matConstants;
 
+    // SCENE
+    DrawContext _mainDrawContext;
+    std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
+
     struct SDL_Window *_window = nullptr;
 
     static JVKEngine &get();
@@ -193,6 +221,8 @@ public:
     AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
     AllocatedImage createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
     void destroyImage(const AllocatedImage &img) const;
+
+    void updateScene();
 private:
     bool _resizeRequested = false;
     void resizeSwapchain();

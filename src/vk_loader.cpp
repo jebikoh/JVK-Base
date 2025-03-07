@@ -7,7 +7,7 @@
 #include <vk_loader.hpp>
 #include <iostream>
 
-constexpr bool JVK_OVERRIDE_COLORS_WITH_NORMAL_MAP = true;
+constexpr bool JVK_OVERRIDE_COLORS_WITH_NORMAL_MAP = false;
 
 std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(JVKEngine *engine, std::filesystem::path filePath) {
     fmt::print("Loading GLTF mesh: {}", filePath.string());
