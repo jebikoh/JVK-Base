@@ -93,6 +93,7 @@ public:
     AllocatedImage _drawImage;
     AllocatedImage _depthImage;
     VkExtent2D _drawExtent;
+    float renderScale = 1.0f;
 
     // DESCRIPTORS
     DescriptorAllocator _globalDescriptorAllocator;
@@ -138,6 +139,9 @@ public:
     void immediateSubmit(std::function<void(VkCommandBuffer cmd)> && function) const;
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 private:
+    bool _resizeRequested = false;
+    void resizeSwapchain();
+
     // INITIALIZATION
     void initVulkan();
     void initSwapchain();
@@ -167,6 +171,6 @@ private:
     AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
     void destroyBuffer(const AllocatedBuffer &buffer) const;
 
-    // Meshes
+    // MESHES
     void initDefaultData();
 };

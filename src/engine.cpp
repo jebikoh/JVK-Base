@@ -39,7 +39,7 @@ void JVKEngine::init() {
 
     SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_WindowFlags windowFlags = (SDL_WindowFlags) (SDL_WINDOW_VULKAN);
+    SDL_WindowFlags windowFlags = (SDL_WindowFlags) (SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
     _window = SDL_CreateWindow(
             "JVK",
@@ -143,14 +143,18 @@ void JVKEngine::draw() {
 
     // Request an image from swapchain
     uint32_t swapchainImageIndex;
-    VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, getCurrentFrame()._swapchainSemaphore, nullptr, &swapchainImageIndex));
+    VkResult e = vkAcquireNextImageKHR(_device, _swapchain, 1000000000, getCurrentFrame()._swapchainSemaphore, nullptr, &swapchainImageIndex);
+    if (e == VK_ERROR_OUT_OF_DATE_KHR) {
+        _resizeRequested = true;
+        return;
+    }
 
     // Reset the command buffer
     VkCommandBuffer cmd = getCurrentFrame()._mainCommandBuffer;
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-    _drawExtent.width  = _drawImage.imageExtent.width;
-    _drawExtent.height = _drawImage.imageExtent.height;
+    _drawExtent.width  = std::min(_swapchainExtent.width, _drawImage.imageExtent.width) * renderScale;
+    _drawExtent.height = std::min(_swapchainExtent.height, _drawImage.imageExtent.height) * renderScale;
 
     // Start the command buffer
     VkCommandBufferBeginInfo cmdBeginInfo = VkInit::commandBufferBegin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -217,7 +221,12 @@ void JVKEngine::draw() {
     presentInfo.pWaitSemaphores    = &getCurrentFrame()._renderSemaphore;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pImageIndices      = &swapchainImageIndex;
-    VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
+
+
+    VkResult presentResult = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
+    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
+        _resizeRequested = true;
+    }
 
     _frameNumber++;
 }
@@ -247,12 +256,18 @@ void JVKEngine::run() {
             continue;
         }
 
+        if (_resizeRequested) {
+            resizeSwapchain();
+        }
+
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
 
         ImGui::NewFrame();
 
         if (ImGui::Begin("computeEffects")) {
+
+            ImGui::SliderFloat("Render Scale", &renderScale, 0.3f, 1.0f);
 
             ComputeEffect &selected = computeEffects[currentComputeEffect];
 
@@ -872,4 +887,17 @@ void JVKEngine::initDefaultData() {
     rectangle = uploadMesh(indices, vertices);
 
     testMeshes = loadGltfMeshes(this, "../assets/basicmesh.glb").value();
+}
+
+void JVKEngine::resizeSwapchain() {
+    vkDeviceWaitIdle(_device);
+    destroySwapchain();
+
+    int w, h;
+    SDL_GetWindowSize(_window,  &w, &h);
+    _windowExtent.width = w;
+    _windowExtent.height = h;
+
+    createSwapchain(_windowExtent.width, _windowExtent.height);
+    _resizeRequested = false;
 }
