@@ -75,10 +75,20 @@ void JVKEngine::cleanup() {
             vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
 
             _frames[i]._deletionQueue.flush();
+
+            _frames[i]._frameDescriptors.destroyPools(_device);
         }
 
+        // Textures
+        vkDestroySampler(_device, _defaultSamplerLinear, nullptr);
+        vkDestroySampler(_device, _defaultSamplerNearest, nullptr);
+        destroyImage(_errorCheckerboardImage);
+        destroyImage(_blackImage);
+        destroyImage(_greyImage);
+        destroyImage(_whiteImage);
+
         // Mesh data
-        for (const auto &mesh : testMeshes) {
+        for (const auto &mesh: testMeshes) {
             destroyBuffer(mesh->meshBuffers.vertexBuffer);
             destroyBuffer(mesh->meshBuffers.indexBuffer);
         }
@@ -110,6 +120,8 @@ void JVKEngine::cleanup() {
         // Descriptors
         _globalDescriptorAllocator.destroyPool(_device);
         vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
+        vkDestroyDescriptorSetLayout(_device, _gpuSceneDataDescriptorLayout, nullptr);
+        vkDestroyDescriptorSetLayout(_device, _singleImageDescriptorLayout, nullptr);
 
         // Depth image
         vkDestroyImageView(_device, _depthImage.imageView, nullptr);
@@ -139,6 +151,8 @@ void JVKEngine::cleanup() {
 void JVKEngine::draw() {
     // Wait and reset render fence
     VK_CHECK(vkWaitForFences(_device, 1, &getCurrentFrame()._renderFence, true, 1000000000));
+    getCurrentFrame()._frameDescriptors.clearPools(_device);
+
     VK_CHECK(vkResetFences(_device, 1, &getCurrentFrame()._renderFence));
 
     // Request an image from swapchain
@@ -478,35 +492,53 @@ void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
 }
 
 void JVKEngine::initDescriptors() {
-    // POOL
+    // GLOBAL DESCRIPTOR ALLOCATOR
     std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
             {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}};
     _globalDescriptorAllocator.initPool(_device, 10, sizes);
 
-    // LAYOUTS
+    // DRAW IMAGE
+    // Layout
     {
         DescriptorLayoutBuilder builder;
         builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
         _drawImageDescriptorLayout = builder.build(_device, VK_SHADER_STAGE_COMPUTE_BIT);
     }
 
-    // SETS
-    // Allocate draw image descriptor
+    // Allocate set
     _drawImageDescriptors = _globalDescriptorAllocator.allocate(_device, _drawImageDescriptorLayout);
 
-    VkDescriptorImageInfo imgInfo{};
-    imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    imgInfo.imageView   = _drawImage.imageView;
+    // Write to set
+    DescriptorWriter writer;
+    writer.writeImage(0, _drawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+    writer.updateSet(_device, _drawImageDescriptors);
 
-    VkWriteDescriptorSet drawImageWrite{};
-    drawImageWrite.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    drawImageWrite.pNext           = nullptr;
-    drawImageWrite.dstBinding      = 0;
-    drawImageWrite.dstSet          = _drawImageDescriptors;
-    drawImageWrite.descriptorCount = 1;
-    drawImageWrite.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    drawImageWrite.pImageInfo      = &imgInfo;
-    vkUpdateDescriptorSets(_device, 1, &drawImageWrite, 0, nullptr);
+    // FRAME DESCRIPTORS
+    for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
+        std::vector<DynamicDescriptorAllocator::PoolSizeRatio> frameSizes = {
+                {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3},
+                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
+                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
+                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
+        };
+
+        _frames[i]._frameDescriptors = DynamicDescriptorAllocator();
+        _frames[i]._frameDescriptors.init(_device, 1000, frameSizes);
+    }
+
+    // GPU SCENE DATA
+    {
+        DescriptorLayoutBuilder builder;
+        builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        _gpuSceneDataDescriptorLayout = builder.build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    }
+
+    // TEXTURES
+    {
+        DescriptorLayoutBuilder builder;
+        builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        _singleImageDescriptorLayout = builder.build(_device, VK_SHADER_STAGE_FRAGMENT_BIT);
+    }
 }
 
 void JVKEngine::initPipelines() {
@@ -699,14 +731,14 @@ void JVKEngine::initTrianglePipeline() {
 
 void JVKEngine::initMeshPipeline() {
     // LOAD SHADER MODULES
-    VkShaderModule triangleFragShader;
-    if (!VkUtil::loadShaderModule("../shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
-        fmt::print("Error when building triangle fragment shader module");
-    }
-
     VkShaderModule triangleVertShader;
     if (!VkUtil::loadShaderModule("../shaders/colored_triangle_mesh.vert.spv", _device, &triangleVertShader)) {
         fmt::print("Error when building triangle vertex shader module");
+    }
+
+    VkShaderModule triangleFragShader;
+    if (!VkUtil::loadShaderModule("../shaders/tex_image.frag.spv", _device, &triangleFragShader)) {
+        fmt::print("Error when building triangle fragment shader module");
     }
 
     // PUSH CONSTANTS
@@ -719,6 +751,8 @@ void JVKEngine::initMeshPipeline() {
     VkPipelineLayoutCreateInfo info = VkInit::pipelineLayout();
     info.pPushConstantRanges        = &bufferRange;
     info.pushConstantRangeCount     = 1;
+    info.pSetLayouts                = &_singleImageDescriptorLayout;
+    info.setLayoutCount             = 1;
     VK_CHECK(vkCreatePipelineLayout(_device, &info, nullptr, &_meshPipelineLayout));
 
     // CREATE PIPELINE
@@ -730,7 +764,8 @@ void JVKEngine::initMeshPipeline() {
     builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
     builder.setMultiSamplingNone();
     builder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
-    builder.enableBlendingAdditive();
+//    builder.enableBlendingAdditive();
+    builder.disableBlending();
     builder.setColorAttachmentFormat(_drawImage.imageFormat);
     builder.setDepthAttachmentFormat(_depthImage.imageFormat);
     _meshPipeline = builder.buildPipeline(_device);
@@ -739,7 +774,7 @@ void JVKEngine::initMeshPipeline() {
     vkDestroyShaderModule(_device, triangleVertShader, nullptr);
 }
 
-void JVKEngine::drawGeometry(VkCommandBuffer cmd) const {
+void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     // SETUP RENDER PASS
     VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkRenderingAttachmentInfo depthAttachment = VkInit::depthRenderingAttachment(_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -774,15 +809,34 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) const {
     pushConstants.vertexBuffer = rectangle.vertexBufferAddress;
     vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
-    // DRAW INDEXED
-    vkCmdBindIndexBuffer(cmd, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+    // UNIFORM BUFFERS
+    AllocatedBuffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    GPUSceneData *sceneUniformData     = (GPUSceneData *) gpuSceneDataBuffer.allocation->GetMappedData();
+    *sceneUniformData                  = sceneData;
+
+    VkDescriptorSet globalDescriptor = getCurrentFrame()._frameDescriptors.allocate(_device, _gpuSceneDataDescriptorLayout);
+    {
+        DescriptorWriter writer;
+        writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        writer.updateSet(_device, globalDescriptor);
+    }
+    getCurrentFrame()._deletionQueue.push([=, this]() {
+        destroyBuffer(gpuSceneDataBuffer);
+    });
+
+    // TEXTURE DESCRIPTOR
+    VkDescriptorSet imageSet = getCurrentFrame()._frameDescriptors.allocate(_device, _singleImageDescriptorLayout);
+    {
+        DescriptorWriter writer;
+        writer.writeImage(0, _errorCheckerboardImage.imageView, _defaultSamplerNearest, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        writer.updateSet(_device, imageSet);
+    }
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipelineLayout, 0, 1, &imageSet, 0, nullptr);
 
     // MONKEY HEAD
     pushConstants.vertexBuffer = testMeshes[2]->meshBuffers.vertexBufferAddress;
-
-    glm::mat4 view = glm::translate(glm::vec3(0, 0, -5));
-    glm::mat4 proj = glm::perspective(glm::radians(70.0f), static_cast<float>(_drawExtent.width) / static_cast<float>(_drawExtent.height), 0.1f, 10000.0f);
+    glm::mat4 view             = glm::translate(glm::vec3(0, 0, -5));
+    glm::mat4 proj             = glm::perspective(glm::radians(70.0f), static_cast<float>(_drawExtent.width) / static_cast<float>(_drawExtent.height), 0.1f, 10000.0f);
     proj[1][1] *= -1;
     pushConstants.worldMatrix = proj * view;
 
@@ -864,6 +918,7 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
 }
 
 void JVKEngine::initDefaultData() {
+    // RECTANGLE
     std::array<Vertex, 4> vertices;
     vertices[0].position = {0.5, -0.5, 1};
     vertices[1].position = {0.5, 0.5, 1};
@@ -886,7 +941,40 @@ void JVKEngine::initDefaultData() {
 
     rectangle = uploadMesh(indices, vertices);
 
+    // GLTF TEST MESHES
     testMeshes = loadGltfMeshes(this, "../assets/basicmesh.glb").value();
+
+    // TEXTURES
+    // 1 pixel default textures
+    uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
+    _whiteImage    = createImage((void *) &white, VkExtent3D{1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 1));
+    _greyImage    = createImage((void *) &grey, VkExtent3D{1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    uint32_t black = glm::packUnorm4x8(glm::vec4(0, 0, 0, 1.0f));
+    _blackImage    = createImage((void *) &black, VkExtent3D{1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    //checkerboard image
+    uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
+    std::array<uint32_t, 16 * 16> pixels;
+    for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 16; y++) {
+            pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : black;
+        }
+    }
+    _errorCheckerboardImage = createImage(pixels.data(), VkExtent3D{16, 16, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    // SAMPLERS
+    VkSamplerCreateInfo sampler{};
+    sampler.sType     = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sampler.magFilter = VK_FILTER_NEAREST;
+    sampler.minFilter = VK_FILTER_NEAREST;
+    vkCreateSampler(_device, &sampler, nullptr, &_defaultSamplerNearest);
+
+    sampler.magFilter = VK_FILTER_LINEAR;
+    sampler.minFilter = VK_FILTER_LINEAR;
+    vkCreateSampler(_device, &sampler, nullptr, &_defaultSamplerLinear);
 }
 
 void JVKEngine::resizeSwapchain() {
@@ -894,10 +982,74 @@ void JVKEngine::resizeSwapchain() {
     destroySwapchain();
 
     int w, h;
-    SDL_GetWindowSize(_window,  &w, &h);
-    _windowExtent.width = w;
+    SDL_GetWindowSize(_window, &w, &h);
+    _windowExtent.width  = w;
     _windowExtent.height = h;
 
     createSwapchain(_windowExtent.width, _windowExtent.height);
     _resizeRequested = false;
+}
+
+AllocatedImage JVKEngine::createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
+    // IMAGE
+    AllocatedImage image;
+    image.imageFormat           = format;
+    image.imageExtent           = size;
+    VkImageCreateInfo imageInfo = VkInit::image(format, usage, size);
+    if (mipmapped) {
+        imageInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
+    }
+
+    // ALLOCATE
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage         = VMA_MEMORY_USAGE_GPU_ONLY;
+    allocInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VK_CHECK(vmaCreateImage(_allocator, &imageInfo, &allocInfo, &image.image, &image.allocation, nullptr));
+
+    // DEPTH
+    VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
+    if (format == VK_FORMAT_D32_SFLOAT) {
+        aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
+    }
+
+    // IMAGE VIEW
+    VkImageViewCreateInfo viewInfo       = VkInit::imageView(format, image.image, aspectFlag);
+    viewInfo.subresourceRange.levelCount = imageInfo.mipLevels;
+    VK_CHECK(vkCreateImageView(_device, &viewInfo, nullptr, &image.imageView));
+
+    return image;
+}
+
+AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
+    // STAGING BUFFER
+    size_t dataSize              = size.depth * size.width * size.height * 4;
+    AllocatedBuffer uploadBuffer = createBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    memcpy(uploadBuffer.info.pMappedData, data, dataSize);
+
+    // COPY TO IMAGE
+    AllocatedImage image = createImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT, mipmapped);
+    immediateSubmit([&](VkCommandBuffer cmd) {
+        VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        VkBufferImageCopy copyRegion{};
+        copyRegion.bufferOffset      = 0;
+        copyRegion.bufferRowLength   = 0;
+        copyRegion.bufferImageHeight = 0;
+
+        copyRegion.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.imageSubresource.mipLevel       = 0;
+        copyRegion.imageSubresource.baseArrayLayer = 0;
+        copyRegion.imageSubresource.layerCount     = 1;
+        copyRegion.imageExtent                     = size;
+
+        vkCmdCopyBufferToImage(cmd, uploadBuffer.buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+        VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    });
+
+    destroyBuffer(uploadBuffer);
+    return image;
+}
+void JVKEngine::destroyImage(const AllocatedImage &img) {
+    vkDestroyImageView(_device, img.imageView, nullptr);
+    vmaDestroyImage(_allocator, img.image, img.allocation);
 }

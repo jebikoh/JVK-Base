@@ -31,3 +31,36 @@ struct DescriptorAllocator {
     void destroyPool(VkDevice device);
     VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout layout);
 };
+
+struct DynamicDescriptorAllocator {
+    struct PoolSizeRatio {
+        VkDescriptorType type;
+        float ratio;
+    };
+
+    void init(VkDevice device, uint32_t initialSets, std::span<PoolSizeRatio> poolRatios);
+    void clearPools(VkDevice device);
+    void destroyPools(VkDevice device);
+
+    VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout layout, void *pNext = nullptr);
+private:
+    VkDescriptorPool getPool(VkDevice device);
+    VkDescriptorPool createPool(VkDevice device, uint32_t setCount, std::span<PoolSizeRatio> poolRatios);
+
+    std::vector<PoolSizeRatio> ratios;
+    std::vector<VkDescriptorPool> fullPools;
+    std::vector<VkDescriptorPool> readyPools;
+    uint32_t setsPerPool;
+};
+
+struct DescriptorWriter {
+    std::deque<VkDescriptorImageInfo> images;
+    std::vector<VkDescriptorBufferInfo> buffers;
+    std::vector<VkWriteDescriptorSet> writes;
+
+    void writeImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
+    void writeBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
+
+    void clear();
+    void updateSet(VkDevice device, VkDescriptorSet set);
+};

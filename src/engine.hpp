@@ -52,6 +52,7 @@ struct FrameData {
     VkFence _renderFence;
 
     DeletionQueue _deletionQueue;
+    DynamicDescriptorAllocator _frameDescriptors;
 };
 
 constexpr unsigned int JVK_NUM_FRAMES = 2;
@@ -123,6 +124,19 @@ public:
     // MESHES
     GPUMeshBuffers rectangle;
     std::vector<std::shared_ptr<MeshAsset>> testMeshes;
+    GPUSceneData sceneData;
+    VkDescriptorSetLayout _gpuSceneDataDescriptorLayout;
+
+    // TEXTURES
+    AllocatedImage _whiteImage;
+    AllocatedImage _blackImage;
+    AllocatedImage _greyImage;
+    AllocatedImage _errorCheckerboardImage;
+
+    VkSampler _defaultSamplerLinear;
+    VkSampler _defaultSamplerNearest;
+
+    VkDescriptorSetLayout _singleImageDescriptorLayout;
 
     struct SDL_Window *_window = nullptr;
 
@@ -138,6 +152,10 @@ public:
 
     void immediateSubmit(std::function<void(VkCommandBuffer cmd)> && function) const;
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
+
+    AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+    AllocatedImage createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+    void destroyImage(const AllocatedImage &img);
 private:
     bool _resizeRequested = false;
     void resizeSwapchain();
@@ -160,7 +178,7 @@ private:
     // DRAW
     void drawBackground(VkCommandBuffer cmd) const;
     void drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) const;
-    void drawGeometry(VkCommandBuffer cmd) const;
+    void drawGeometry(VkCommandBuffer cmd);
 
     // PIPELINES
     void initBackgroundPipelines();
