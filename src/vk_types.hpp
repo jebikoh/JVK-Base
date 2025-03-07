@@ -29,6 +29,7 @@ struct GPUMeshBuffers {
     VkDeviceAddress vertexBufferAddress;
 };
 
+// GLOBAL PUSH CONSTANTS/DESCRIPTOR DATA
 struct GPUDrawPushConstants {
     glm::mat4 worldMatrix;
     VkDeviceAddress vertexBuffer;
@@ -41,4 +42,22 @@ struct GPUSceneData {
     glm::vec4 ambientColor;
     glm::vec4 sunlightDirection;
     glm::vec4 sunlightColor;
+};
+
+// MATERIALS
+enum class MaterialPass : uint8_t {
+    MAIN_COLOR,
+    TRANSPARENT,
+    OTHER
+};
+
+struct MaterialPipeline {
+    VkPipeline pipeline;
+    VkPipelineLayout pipelineLayout;
+};
+
+struct MaterialInstance {
+    MaterialPipeline *pipeline;
+    VkDescriptorSet materialSet;
+    MaterialPass passType;
 };

@@ -1053,3 +1053,66 @@ void JVKEngine::destroyImage(const AllocatedImage &img) {
     vkDestroyImageView(_device, img.imageView, nullptr);
     vmaDestroyImage(_allocator, img.image, img.allocation);
 }
+
+void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
+    // LOAD SHADERS
+    VkShaderModule vertShader;
+    if (!VkUtil::loadShaderModule("../shaders/mesh.vert.spv", engine->_device, &vertShader)) {
+        fmt::print("Error when building vertex shader module");
+    }
+    VkShaderModule fragShader;
+    if (!VkUtil::loadShaderModule("../shaders/mesh.frag.spv", engine->_device, &fragShader)) {
+        fmt::print("Error when building fragment shader module");
+    }
+
+    // PUSH CONSTANTS
+    VkPushConstantRange matrixRange{};
+    matrixRange.offset = 0;
+    matrixRange.size = sizeof(GPUDrawPushConstants);
+    matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    // DESCRIPTOR LAYOUT
+    DescriptorLayoutBuilder builder;
+    builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    materialDescriptorLayout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    // _gpuSceneDataDescriptorLayout is used as our global descriptor layout
+    VkDescriptorSetLayout layouts[] = { engine->_gpuSceneDataDescriptorLayout, materialDescriptorLayout};
+
+    // PIPELINE LAYOUT
+    VkPipelineLayoutCreateInfo layoutInfo = VkInit::pipelineLayout();
+    layoutInfo.setLayoutCount = 2;
+    layoutInfo.pSetLayouts = layouts;
+    layoutInfo.pPushConstantRanges = &matrixRange;
+    layoutInfo.pushConstantRangeCount = 1;
+
+    VkPipelineLayout layout;
+    VK_CHECK(vkCreatePipelineLayout(engine->_device, &layoutInfo, nullptr, &layout));
+
+    opaquePipeline.pipelineLayout = layout;
+    transparentPipeline.pipelineLayout = layout;
+
+    // PIPELINE
+    VkUtil::PipelineBuilder pipelineBuilder;
+    pipelineBuilder.setShaders(vertShader, fragShader);
+    pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+    pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+    pipelineBuilder.setMultiSamplingNone();
+    pipelineBuilder.disableBlending();
+    pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
+    pipelineBuilder.setColorAttachmentFormat(engine->_drawImage.imageFormat);
+    pipelineBuilder.setDepthAttachmentFormat(engine->_depthImage.imageFormat);
+    pipelineBuilder._pipelineLayout = layout;
+
+    opaquePipeline.pipeline = pipelineBuilder.buildPipeline(engine->_device);
+
+    pipelineBuilder.enableBlendingAdditive();
+    pipelineBuilder.enableDepthTest(false, VK_COMPARE_OP_LESS_OR_EQUAL);
+
+    transparentPipeline.pipeline = pipelineBuilder.buildPipeline(engine->_device);
+
+    vkDestroyShaderModule(engine->_device, vertShader, nullptr);
+    vkDestroyShaderModule(engine->_device, fragShader, nullptr);
+}

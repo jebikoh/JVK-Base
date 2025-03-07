@@ -5,6 +5,38 @@
 #include <vk_descriptors.hpp>
 #include <vk_types.hpp>
 
+class JVKEngine;
+
+struct GLTFMetallicRoughness {
+    MaterialPipeline opaquePipeline;
+    MaterialPipeline transparentPipeline;
+    VkDescriptorSetLayout materialDescriptorLayout;
+
+    // To be written to UBO
+    struct MaterialConstants {
+        glm::vec4 colorFactors;
+        glm::vec4 metallicRoughnessFactors;
+        glm::vec4 extra[14];
+    };
+
+    struct MaterialResources {
+        AllocatedImage colorImage;
+        VkSampler colorSampler;
+
+        AllocatedImage metallicRoughnessImage;
+        VkSampler metallicRoughnessSampler;
+
+        VkBuffer dataBuffer;
+        uint32_t dataBufferOffset;
+    };
+
+    DescriptorWriter writer;
+
+    void buildPipelines(JVKEngine *engine);
+    void clearResources(VkDevice device);
+
+    MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources &resources, DynamicDescriptorAllocator &descriptorAllocator);
+};
 
 struct MeshAsset;
 struct ComputePushConstants {
