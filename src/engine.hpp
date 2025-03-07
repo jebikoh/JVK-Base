@@ -2,11 +2,11 @@
 
 #include "vk_loader.hpp"
 
-
 #include <jvk.hpp>
 #include <stack>
 #include <vk_descriptors.hpp>
 #include <vk_types.hpp>
+#include <camera.hpp>
 
 class JVKEngine;
 
@@ -201,7 +201,10 @@ public:
 
     // SCENE
     DrawContext _mainDrawContext;
-    std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
+    std::unordered_map<std::string, std::shared_ptr<Node>> _loadedNodes;
+
+    // CAMERA
+    Camera _mainCamera;
 
     struct SDL_Window *_window = nullptr;
 

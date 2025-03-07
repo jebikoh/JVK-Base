@@ -21,8 +21,8 @@
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
 
-#define GLM_ENABLE_EXPERIMENTAL
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
 
 constexpr bool JVK_USE_VALIDATION_LAYERS = true;
@@ -57,6 +57,12 @@ void JVKEngine::init() {
     initPipelines();
     initImgui();
     initDefaultData();
+
+    // CAMERA
+    _mainCamera.velocity = glm::vec3(0.0f);
+    _mainCamera.position = glm::vec3(0.0f, 0.0f, 5.0f);
+    _mainCamera.pitch = 0.0f;
+    _mainCamera.yaw = 0.0f;
 
     _isInitialized = true;
 }
@@ -264,6 +270,7 @@ void JVKEngine::run() {
                 }
             }
 
+            _mainCamera.processSDLEvent(e);
             ImGui_ImplSDL2_ProcessEvent(&e);
         }
 
@@ -1005,7 +1012,7 @@ void JVKEngine::initDefaultData() {
             s.material = std::make_shared<GLTFMaterial>(_defaultMaterialData);
         }
 
-        loadedNodes[m->name] = std::move(newNode);
+        _loadedNodes[m->name] = std::move(newNode);
     }
 }
 
@@ -1087,18 +1094,22 @@ void JVKEngine::destroyImage(const AllocatedImage &img) const {
 }
 
 void JVKEngine::updateScene() {
+    _mainCamera.update();
+    glm::mat4 view = _mainCamera.getViewMatrix();
+    glm::mat4 proj = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 0.1f, 10000.0f);
+    proj[1][1] *= -1;
+
     _mainDrawContext.opaqueSurfaces.clear();
-    loadedNodes["Suzanne"]->draw(glm::mat4{1.0f}, _mainDrawContext);
+    _loadedNodes["Suzanne"]->draw(glm::mat4{1.0f}, _mainDrawContext);
 
     for (int x = -3; x < 3; ++x) {
         glm::mat4 scale = glm::scale(glm::vec3{0.2});
         glm::mat4 translation = glm::translate(glm::vec3{x, 1, 0});
-        loadedNodes["Cube"]->draw(translation * scale, _mainDrawContext);
+        _loadedNodes["Cube"]->draw(translation * scale, _mainDrawContext);
     }
 
-    sceneData.view = glm::translate(glm::vec3{ 0,0,-5 });
-    sceneData.proj = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 0.1f, 10000.0f);
-    sceneData.proj[1][1] *= -1;
+    sceneData.view = view;
+    sceneData.proj = proj;
     sceneData.viewProj = sceneData.proj * sceneData.view;
     sceneData.ambientColor = glm::vec4(0.1f);
     sceneData.sunlightColor = glm::vec4(1.0f);

@@ -19,6 +19,8 @@ add_executable(JVK_Engine src/main.cpp
         src/vk_pipelines.hpp
         src/vk_loader.hpp
         src/vk_loader.cpp
+        src/camera.hpp
+        src/camera.cpp
 )
 
 add_subdirectory(include/vkbootstrap)
