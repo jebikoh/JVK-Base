@@ -820,6 +820,23 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     _stats.triangleCount = 0;
     auto start= std::chrono::system_clock::now();
 
+    // SORT DRAWS
+    std::vector<uint32_t> opaqueDraws;
+    opaqueDraws.reserve(_mainDrawContext.opaqueSurfaces.size());
+    for (uint32_t i = 0; i < _mainDrawContext.opaqueSurfaces.size(); ++i) {
+        opaqueDraws.push_back(i);
+    }
+
+    std::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const auto &iA, const auto &iB) {
+       const RenderObject &A = _mainDrawContext.opaqueSurfaces[iA];
+       const RenderObject &B = _mainDrawContext.opaqueSurfaces[iB];
+
+       if (A.material == B.material) {
+           return A.indexBuffer < B.indexBuffer;
+       }
+       return A.material < B.material;
+    });
+
     // SETUP RENDER PASS
     VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkRenderingAttachmentInfo depthAttachment = VkInit::depthRenderingAttachment(_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -827,26 +844,6 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
     // BEGIN RENDER PASS
     vkCmdBeginRendering(cmd, &renderingInfo);
-    // BIND PIPELINE
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
-
-    // VIEWPORT
-    VkViewport viewport{};
-    viewport.x        = 0;
-    viewport.y        = 0;
-    viewport.width    = _drawExtent.width;
-    viewport.height   = _drawExtent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-    // SCISSOR
-    VkRect2D scissor{};
-    scissor.offset.x      = 0;
-    scissor.offset.y      = 0;
-    scissor.extent.width  = _drawExtent.width;
-    scissor.extent.height = _drawExtent.height;
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     // UNIFORM BUFFERS & GLOBAL DESCRIPTOR SET
     // Contains global scene data (projection matrices, light, etc)
@@ -863,15 +860,48 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
         destroyBuffer(gpuSceneDataBuffer);
     });
 
-    auto draw = [&](const RenderObject &r) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipeline);
+    MaterialPipeline *lastPipeline = nullptr;
+    MaterialInstance *lastMaterial = nullptr;
+    VkBuffer lastIndexBuffer = VK_NULL_HANDLE;
 
-        // Bind global descriptor and material descriptor
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 1, 1, &r.material->materialSet,0, nullptr);
+    auto draw = [&](const RenderObject &r) {
+        if (r.material != lastMaterial) {
+            lastMaterial = r.material;
+
+            // Rebind pipeline and global descriptors if material is different
+            if (r.material->pipeline != lastPipeline) {
+                lastPipeline = r.material->pipeline;
+
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipeline);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
+
+                VkViewport viewport{};
+                viewport.x        = 0;
+                viewport.y        = 0;
+                viewport.width    = _drawExtent.width;
+                viewport.height   = _drawExtent.height;
+                viewport.minDepth = 0.0f;
+                viewport.maxDepth = 1.0f;
+                vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+                // SCISSOR
+                VkRect2D scissor{};
+                scissor.offset.x      = 0;
+                scissor.offset.y      = 0;
+                scissor.extent.width  = _drawExtent.width;
+                scissor.extent.height = _drawExtent.height;
+                vkCmdSetScissor(cmd, 0, 1, &scissor);
+            }
+
+            // Bind material descriptor set
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 1, 1, &r.material->materialSet,0, nullptr);
+        }
 
         // Bind index buffer
-        vkCmdBindIndexBuffer(cmd, r.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        if (r.indexBuffer != lastIndexBuffer) {
+            lastIndexBuffer = r.indexBuffer;
+            vkCmdBindIndexBuffer(cmd, r.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        }
 
         // Push constants
         GPUDrawPushConstants pushConstants;
@@ -886,8 +916,8 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
         _stats.triangleCount += r.indexCount / 3;
     };
 
-    for (const RenderObject &r : _mainDrawContext.opaqueSurfaces) {
-        draw(r);
+    for (const auto &r : opaqueDraws) {
+        draw(_mainDrawContext.opaqueSurfaces[r]);
     }
 
     for (const RenderObject &r : _mainDrawContext.transparentSurfaces) {
