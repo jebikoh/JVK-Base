@@ -63,6 +63,7 @@ add_subdirectory(include/fastgltf)
 target_include_directories(JVK_Engine
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/stb
 )
 
 target_link_libraries(imgui PUBLIC Vulkan::Vulkan SDL2::SDL2)

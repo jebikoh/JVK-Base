@@ -10,7 +10,78 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 constexpr bool JVK_OVERRIDE_COLORS_WITH_NORMAL_MAP = false;
+
+std::optional<AllocatedImage> loadImage(JVKEngine *engine, fastgltf::Asset &asset, fastgltf::Image &image) {
+    AllocatedImage newImage{};
+    int width, height, channels;
+
+    // TOP 10 C++ FEATURES I HATE
+    std::visit(fastgltf::visitor {
+                       [](auto& arg) {},
+                       [&](fastgltf::sources::URI& filePath) {
+                           assert(filePath.fileByteOffset == 0); // We don't support offsets with stbi.
+                           assert(filePath.uri.isLocalPath()); // We're only capable of loading local files.
+                           int width, height, nrChannels;
+
+                           const std::string path(filePath.uri.path().begin(), filePath.uri.path().end()); // Thanks C++.
+                           unsigned char *data = stbi_load(path.c_str(), &width, &height, &nrChannels, 4);
+
+                           if (data) {
+                               VkExtent3D imageSize;
+                               imageSize.width = width;
+                               imageSize.height = height;
+                               imageSize.depth = 1;
+
+                               newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+                               stbi_image_free(data);
+                           }
+                       },
+                       [&](fastgltf::sources::Array& vector) {
+                           int width, height, nrChannels;
+                           unsigned char *data = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(vector.bytes.data()), static_cast<int>(vector.bytes.size()), &width, &height, &nrChannels, 4);
+                           if (data) {
+                               VkExtent3D imageSize;
+                               imageSize.width = width;
+                               imageSize.height = height;
+                               imageSize.depth = 1;
+
+                               newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+                               stbi_image_free(data);
+                           }
+                       },
+                       [&](fastgltf::sources::BufferView& view) {
+                           auto& bufferView = asset.bufferViews[view.bufferViewIndex];
+                           auto& buffer = asset.buffers[bufferView.bufferIndex];
+                           std::visit(fastgltf::visitor {
+                                              [](auto& arg) {},
+                                              [&](fastgltf::sources::Array& vector) {
+                                                  int width, height, nrChannels;
+                                                  unsigned char* data = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(vector.bytes.data() + bufferView.byteOffset),
+                                                                                              static_cast<int>(bufferView.byteLength), &width, &height, &nrChannels, 4);
+                                                  if (data) {
+                                                      VkExtent3D imageSize;
+                                                      imageSize.width = width;
+                                                      imageSize.height = height;
+                                                      imageSize.depth = 1;
+
+                                                      newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+                                                      stbi_image_free(data);
+                                                  }
+                                              }
+                                      }, buffer.data);
+                       },
+               }, image.data);
+
+
+    if (newImage.image == VK_NULL_HANDLE) {
+        return {};
+    }
+    return newImage;
+}
 
 VkFilter extractFilter(fastgltf::Filter filter) {
     switch (filter) {
@@ -50,12 +121,17 @@ void LoadedGLTF::destroy() {
     descriptorPool.destroyPools(device);
     engine->destroyBuffer(materialDataBuffer);
 
-    for (auto & [k, v] : meshes) {
+    for (auto &[k, v]: meshes) {
         engine->destroyBuffer(v->meshBuffers.indexBuffer);
         engine->destroyBuffer(v->meshBuffers.vertexBuffer);
     }
 
-    for (const auto &sampler : samplers) {
+    for (auto &[k, v]: images) {
+        if (v.image == engine->_errorCheckerboardImage.image) continue;
+        engine->destroyImage(v);
+    }
+
+    for (const auto &sampler: samplers) {
         vkDestroySampler(device, sampler, nullptr);
     }
 }
@@ -133,7 +209,15 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
 
     // LOAD TEXTURES
     for (fastgltf::Image &image: gltf.images) {
-        images.push_back(engine->_errorCheckerboardImage);
+        std::optional<AllocatedImage> img = loadImage(engine, gltf, image);
+
+        if (img.has_value()) {
+            images.push_back(*img);
+            file.images[image.name.c_str()] = *img;
+        } else {
+            images.push_back(engine->_errorCheckerboardImage);
+            fmt::print("GLTF failed to load texture: {}\n", image.name);
+        }
     }
 
     // LOAD MATERIALS
@@ -188,19 +272,19 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
     // LOAD MESHES
     std::vector<uint32_t> indices;
     std::vector<Vertex> vertices;
-    for (fastgltf::Mesh &mesh : gltf.meshes) {
+    for (fastgltf::Mesh &mesh: gltf.meshes) {
         std::shared_ptr<MeshAsset> newMesh = std::make_shared<MeshAsset>();
         meshes.push_back(newMesh);
         file.meshes[mesh.name.c_str()] = newMesh;
-        newMesh->name = mesh.name;
+        newMesh->name                  = mesh.name;
 
         indices.clear();
         vertices.clear();
 
-        for (auto &&p : mesh.primitives) {
+        for (auto &&p: mesh.primitives) {
             GeoSurface surface;
-            surface.startIndex = static_cast<uint32_t>(indices.size());
-            surface.count = static_cast<uint32_t>(gltf.accessors[p.indicesAccessor.value()].count);
+            surface.startIndex   = static_cast<uint32_t>(indices.size());
+            surface.count        = static_cast<uint32_t>(gltf.accessors[p.indicesAccessor.value()].count);
             size_t initialVertex = vertices.size();
 
             // INDICES
@@ -280,12 +364,12 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
     }
 
     // LOAD NODES
-    for (fastgltf::Node &node : gltf.nodes) {
+    for (fastgltf::Node &node: gltf.nodes) {
         std::shared_ptr<Node> newNode;
 
         // NODE TYPE
         if (node.meshIndex.has_value()) {
-            newNode = std::make_shared<MeshNode>();
+            newNode                                      = std::make_shared<MeshNode>();
             static_cast<MeshNode *>(newNode.get())->mesh = meshes[*node.meshIndex];
         } else {
             newNode = std::make_shared<Node>();
@@ -295,27 +379,27 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
         file.nodes[node.name.c_str()];
 
         // NODE LOCAL TRANSFORM
-        std::visit(fastgltf::visitor {
-            [&](fastgltf::math::fmat4x4 matrix) {
-                memcpy(&newNode->localTransform, matrix.data(), sizeof(matrix));
-            },
-            [&](fastgltf::TRS transform) {
-                glm::vec3 tl(transform.translation[0], transform.translation[1], transform.translation[2]);
-                glm::quat rot(transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]);
-                glm::vec3 sc(transform.scale[0], transform.scale[1], transform.scale[2]);
+        std::visit(fastgltf::visitor{
+                           [&](fastgltf::math::fmat4x4 matrix) {
+                               memcpy(&newNode->localTransform, matrix.data(), sizeof(matrix));
+                           },
+                           [&](fastgltf::TRS transform) {
+                               glm::vec3 tl(transform.translation[0], transform.translation[1], transform.translation[2]);
+                               glm::quat rot(transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]);
+                               glm::vec3 sc(transform.scale[0], transform.scale[1], transform.scale[2]);
 
-                glm::mat4 tm = glm::translate(glm::mat4(1.0f), tl);
-                glm::mat4 rm = glm::toMat4(rot);
-                glm::mat4 sm = glm::scale(glm::mat4(1.0f), sc);
+                               glm::mat4 tm = glm::translate(glm::mat4(1.0f), tl);
+                               glm::mat4 rm = glm::toMat4(rot);
+                               glm::mat4 sm = glm::scale(glm::mat4(1.0f), sc);
 
-                newNode->localTransform = tm * rm * sm;
-            }
-        }, node.transform);
+                               newNode->localTransform = tm * rm * sm;
+                           }},
+                   node.transform);
     }
 
     // BUILD HIERARCHY
     for (int i = 0; i < gltf.nodes.size(); ++i) {
-        fastgltf::Node &node = gltf.nodes[i];
+        fastgltf::Node &node             = gltf.nodes[i];
         std::shared_ptr<Node> &sceneNode = nodes[i];
 
         for (auto &c: node.children) {
@@ -325,7 +409,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
     }
 
     // TOP NODES
-    for (auto &node : nodes) {
+    for (auto &node: nodes) {
         if (node->parent.lock() == nullptr) {
             file.topNodes.push_back(node);
             node->refreshTransform(glm::mat4{1.0f});

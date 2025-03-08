@@ -269,6 +269,14 @@ void JVKEngine::run() {
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) bQuit = true;
 
+            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                SDL_SetRelativeMouseMode(SDL_TRUE);
+            }
+
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+                SDL_SetRelativeMouseMode(SDL_FALSE);
+            }
+
             if (e.type == SDL_WINDOWEVENT) {
                 if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) {
                     _stopRendering = true;
@@ -840,25 +848,32 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
         destroyBuffer(gpuSceneDataBuffer);
     });
 
-    for (const RenderObject &draw : _mainDrawContext.opaqueSurfaces) {
-        // Bind material pipeline
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipeline);
+    auto draw = [&](const RenderObject &r) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipeline);
 
         // Bind global descriptor and material descriptor
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipelineLayout, 1, 1, &draw.material->materialSet,0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 1, 1, &r.material->materialSet,0, nullptr);
 
         // Bind index buffer
-        vkCmdBindIndexBuffer(cmd, draw.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(cmd, r.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
         // Push constants
         GPUDrawPushConstants pushConstants;
-        pushConstants.vertexBuffer = draw.vertexBufferAddress;
-        pushConstants.worldMatrix = draw.transform;
-        vkCmdPushConstants(cmd, draw.material->pipeline->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+        pushConstants.vertexBuffer = r.vertexBufferAddress;
+        pushConstants.worldMatrix = r.transform;
+        vkCmdPushConstants(cmd, r.material->pipeline->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
         // Draw
-        vkCmdDrawIndexed(cmd, draw.indexCount, 1, draw.firstIndex, 0, 0);
+        vkCmdDrawIndexed(cmd, r.indexCount, 1, r.firstIndex, 0, 0);
+    };
+
+    for (const RenderObject &r : _mainDrawContext.opaqueSurfaces) {
+        draw(r);
+    }
+
+    for (const RenderObject &r : _mainDrawContext.transparentSurfaces) {
+        draw(r);
     }
 
     vkCmdEndRendering(cmd);
@@ -1108,14 +1123,8 @@ void JVKEngine::updateScene() {
     proj[1][1] *= -1;
 
     _mainDrawContext.opaqueSurfaces.clear();
+    _mainDrawContext.transparentSurfaces.clear();
     loadedScenes["structure"]->draw(glm::mat4(1.0f), _mainDrawContext);
-    // _loadedNodes["Suzanne"]->draw(glm::mat4{1.0f}, _mainDrawContext);
-    //
-    // for (int x = -3; x < 3; ++x) {
-    //     glm::mat4 scale = glm::scale(glm::vec3{0.2});
-    //     glm::mat4 translation = glm::translate(glm::vec3{x, 1, 0});
-    //     _loadedNodes["Cube"]->draw(translation * scale, _mainDrawContext);
-    // }
 
     sceneData.view = view;
     sceneData.proj = proj;
@@ -1138,7 +1147,11 @@ void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {
         rObj.transform = nodeMatrix;
         rObj.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
 
-        ctx.opaqueSurfaces.push_back(rObj);
+        if (rObj.material->passType == MaterialPass::TRANSPARENT) {
+            ctx.transparentSurfaces.push_back(rObj);
+        } else {
+            ctx.opaqueSurfaces.push_back(rObj);
+        }
     }
 
     Node::draw(topMatrix, ctx);

@@ -23,6 +23,7 @@ struct RenderObject {
 
 struct DrawContext {
     std::vector<RenderObject> opaqueSurfaces;
+    std::vector<RenderObject> transparentSurfaces;
 };
 
 struct MeshNode : public Node {
@@ -255,7 +256,7 @@ private:
     // DRAW
     void drawBackground(VkCommandBuffer cmd) const;
     void drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) const;
-    void drawGeometry(VkCommandBuffer cmd);
+    void drawGeometry(VkCommandBuffer r);
 
     // PIPELINES
     void initBackgroundPipelines();
