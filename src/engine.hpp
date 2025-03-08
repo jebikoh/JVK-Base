@@ -179,8 +179,6 @@ public:
     VkDescriptorPool _imguiPool;
 
     // MESHES
-    GPUMeshBuffers rectangle;
-    std::vector<std::shared_ptr<MeshAsset>> testMeshes;
     GPUSceneData sceneData;
     VkDescriptorSetLayout _gpuSceneDataDescriptorLayout;
 
@@ -203,7 +201,6 @@ public:
     // SCENE
     DrawContext _mainDrawContext;
     std::unordered_map<std::string, std::shared_ptr<Node>> _loadedNodes;
-
     std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
 
     // CAMERA

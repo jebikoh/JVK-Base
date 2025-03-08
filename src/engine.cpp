@@ -34,6 +34,7 @@ JVKEngine &JVKEngine::get() {
 }
 
 void JVKEngine::init() {
+    fmt::print("Initializing engine\n");
     assert(loadedEngine == nullptr);
     loadedEngine = this;
 
@@ -65,12 +66,13 @@ void JVKEngine::init() {
     _mainCamera.yaw = 0.0f;
 
     // SCENE
-    std::string structurePath = "../assets/structure.glb";
-    auto structureFile = loadGLTF(this, structurePath);
-    assert(structureFile.has_value());
-    loadedScenes["structure"] = *structureFile;
+    std::string scenePath = "../assets/structure.glb";
+    auto sceneFile = loadGLTF(this, scenePath);
+    assert(sceneFile.has_value());
+    loadedScenes["base_scene"] = *sceneFile;
 
     _isInitialized = true;
+    fmt::print("Engine initialized\n");
 }
 
 void JVKEngine::cleanup() {
@@ -104,12 +106,6 @@ void JVKEngine::cleanup() {
         // Default data
         _metallicRoughnessMaterial.clearResources(_device);
         destroyBuffer(_matConstants);
-        for (const auto &mesh: testMeshes) {
-            destroyBuffer(mesh->meshBuffers.vertexBuffer);
-            destroyBuffer(mesh->meshBuffers.indexBuffer);
-        }
-        destroyBuffer(rectangle.indexBuffer);
-        destroyBuffer(rectangle.vertexBuffer);
 
         // ImGui
         ImGui_ImplVulkan_Shutdown();
@@ -949,32 +945,6 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
 }
 
 void JVKEngine::initDefaultData() {
-    // RECTANGLE
-    std::array<Vertex, 4> vertices;
-    vertices[0].position = {0.5, -0.5, 1};
-    vertices[1].position = {0.5, 0.5, 1};
-    vertices[2].position = {-0.5, -0.5, 1};
-    vertices[3].position = {-0.5, 0.5, 1};
-
-    vertices[0].color = {0, 0, 0, 1};
-    vertices[1].color = {0.5, 0.5, 0.5, 1};
-    vertices[2].color = {1, 0, 0, 1};
-    vertices[3].color = {0, 1, 0, 1};
-
-    std::array<uint32_t, 6> indices;
-    indices[0] = 0;
-    indices[1] = 1;
-    indices[2] = 2;
-
-    indices[3] = 2;
-    indices[4] = 1;
-    indices[5] = 3;
-
-    rectangle = uploadMesh(indices, vertices);
-
-    // GLTF TEST MESHES
-    testMeshes = loadGltfMeshes(this, "../assets/basicmesh.glb").value();
-
     // TEXTURES
     // 1 pixel default textures
     uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
@@ -1023,20 +993,6 @@ void JVKEngine::initDefaultData() {
     matResources.dataBufferOffset = 0;
 
     _defaultMaterialData = _metallicRoughnessMaterial.writeMaterial(_device, MaterialPass::MAIN_COLOR, matResources,  _globalDescriptorAllocator);
-
-    for (auto & m : testMeshes) {
-        std::shared_ptr<MeshNode> newNode = std::make_shared<MeshNode>();
-        newNode->mesh = m;
-
-        newNode->localTransform = glm::mat4{1.0f};
-        newNode->worldTransform = glm::mat4{1.0f};
-
-        for (auto &s : newNode->mesh->surfaces) {
-            s.material = std::make_shared<GLTFMaterial>(_defaultMaterialData);
-        }
-
-        _loadedNodes[m->name] = std::move(newNode);
-    }
 }
 
 void JVKEngine::resizeSwapchain() {
@@ -1124,7 +1080,7 @@ void JVKEngine::updateScene() {
 
     _mainDrawContext.opaqueSurfaces.clear();
     _mainDrawContext.transparentSurfaces.clear();
-    loadedScenes["structure"]->draw(glm::mat4(1.0f), _mainDrawContext);
+    loadedScenes["base_scene"]->draw(glm::mat4(1.0f), _mainDrawContext);
 
     sceneData.view = view;
     sceneData.proj = proj;
