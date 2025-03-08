@@ -262,6 +262,8 @@ void JVKEngine::run() {
     bool bQuit = false;
 
     while (!bQuit) {
+        auto start = std::chrono::system_clock::now();
+
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) bQuit = true;
 
@@ -300,6 +302,15 @@ void JVKEngine::run() {
 
         ImGui::NewFrame();
 
+        ImGui::Begin("Stats");
+
+        ImGui::Text("Frame time %f ms", _stats.frameTime);
+        ImGui::Text("Draw time %d ms", _stats.meshDrawTime);
+        ImGui::Text("Update time %d ms", _stats.sceneUpdateTime);
+        ImGui::Text("Triangles %i", _stats.triangleCount);
+        ImGui::Text("Draws %i", _stats.drawCallCount);
+        ImGui::End();
+
         if (ImGui::Begin("computeEffects")) {
 
             ImGui::SliderFloat("Render Scale", &renderScale, 0.3f, 1.0f);
@@ -320,6 +331,10 @@ void JVKEngine::run() {
         ImGui::Render();
 
         draw();
+
+        auto end = std::chrono::system_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end-start);
+        _stats.frameTime = elapsed.count() / 1000.0f;
     }
 }
 
@@ -801,6 +816,10 @@ void JVKEngine::initMeshPipeline() {
 }
 
 void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
+    _stats.drawCallCount = 0;
+    _stats.triangleCount = 0;
+    auto start= std::chrono::system_clock::now();
+
     // SETUP RENDER PASS
     VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkRenderingAttachmentInfo depthAttachment = VkInit::depthRenderingAttachment(_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -862,6 +881,9 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
         // Draw
         vkCmdDrawIndexed(cmd, r.indexCount, 1, r.firstIndex, 0, 0);
+
+        _stats.drawCallCount++;
+        _stats.triangleCount += r.indexCount / 3;
     };
 
     for (const RenderObject &r : _mainDrawContext.opaqueSurfaces) {
@@ -873,6 +895,10 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     }
 
     vkCmdEndRendering(cmd);
+
+    auto end = std::chrono::system_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    _stats.meshDrawTime = elapsed.count() / 1000.0f;
 }
 
 AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const {
@@ -1073,6 +1099,8 @@ void JVKEngine::destroyImage(const AllocatedImage &img) const {
 }
 
 void JVKEngine::updateScene() {
+    auto start = std::chrono::system_clock::now();
+
     _mainCamera.update();
     glm::mat4 view = _mainCamera.getViewMatrix();
     glm::mat4 proj = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 0.1f, 10000.0f);
@@ -1088,6 +1116,10 @@ void JVKEngine::updateScene() {
     sceneData.ambientColor = glm::vec4(0.1f);
     sceneData.sunlightColor = glm::vec4(1.0f);
     sceneData.sunlightDirection = glm::vec4(0,1,0.5,1.0f);
+
+    auto end = std::chrono::system_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    _stats.sceneUpdateTime = elapsed.count() / 1000.0f;
 }
 
 void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {

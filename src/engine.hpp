@@ -206,6 +206,14 @@ public:
     // CAMERA
     Camera _mainCamera;
 
+    struct EngineStats {
+        float frameTime;
+        int triangleCount;
+        int drawCallCount;
+        int sceneUpdateTime;
+        int meshDrawTime;
+    } _stats;
+
     struct SDL_Window *_window = nullptr;
 
     static JVKEngine &get();
