@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(Vulkan REQUIRED)
 
+option(JVK_ENABLE_PERF_FLAGS "Enable performance flags" OFF)
+
 add_executable(JVK_Engine src/main.cpp
         src/jvk.hpp
         src/engine.hpp
@@ -23,12 +25,21 @@ add_executable(JVK_Engine src/main.cpp
         src/camera.cpp
 )
 
+if (JVK_ENABLE_PERF_FLAGS)
+    if (MSVC)
+        message(STATUS "Using MSVC compiler")
+        add_compile_options(/O2 /fp:fast)
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "Using GNU or Clang compiler")
+        add_compile_options(-O3 -ffast-math)
+    else ()
+        message(WARNING "Unknown compiler. No optimization flags added.")
+    endif ()
+endif ()
+
 add_subdirectory(include/vkbootstrap)
 add_subdirectory(include/vma)
 add_subdirectory(include/sdl EXCLUDE_FROM_ALL)
-#if(TARGET SDL2::SDL2main)
-#    target_link_libraries(JVK_Engine PRIVATE )
-#endif()
 
 # GLM
 add_library(glm INTERFACE)
