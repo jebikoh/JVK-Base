@@ -39,8 +39,24 @@ VkSamplerMipmapMode extractMipMapMode(fastgltf::Filter filter) {
 }
 
 void LoadedGLTF::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {
-    for (auto &n : topNodes) {
+    for (auto &n: topNodes) {
         n->draw(topMatrix, ctx);
+    }
+}
+
+void LoadedGLTF::destroy() {
+    const VkDevice device = engine->_device;
+
+    descriptorPool.destroyPools(device);
+    engine->destroyBuffer(materialDataBuffer);
+
+    for (auto & [k, v] : meshes) {
+        engine->destroyBuffer(v->meshBuffers.indexBuffer);
+        engine->destroyBuffer(v->meshBuffers.vertexBuffer);
+    }
+
+    for (const auto &sampler : samplers) {
+        vkDestroySampler(device, sampler, nullptr);
     }
 }
 
@@ -52,7 +68,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
     scene->engine                     = engine;
     LoadedGLTF &file                  = *scene.get();
 
-    constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember | fastgltf::Options::AllowDouble | fastgltf::Options::LoadGLBBuffers | fastgltf::Options::LoadExternalBuffers;
+    constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember | fastgltf::Options::AllowDouble | fastgltf::Options::LoadExternalBuffers;
     fastgltf::Asset gltf;
     fastgltf::Parser parser;
 

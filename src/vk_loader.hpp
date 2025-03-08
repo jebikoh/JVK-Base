@@ -45,7 +45,7 @@ struct LoadedGLTF : public IRenderable {
     virtual void draw(const glm::mat4 &topMatrix, DrawContext &ctx);
 
 private:
-    void destroy() {};
+    void destroy();
 };
 
 std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::filesystem::path filePath);
