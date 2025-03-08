@@ -203,6 +203,8 @@ public:
     DrawContext _mainDrawContext;
     std::unordered_map<std::string, std::shared_ptr<Node>> _loadedNodes;
 
+    std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
+
     // CAMERA
     Camera _mainCamera;
 
@@ -221,9 +223,14 @@ public:
     void immediateSubmit(std::function<void(VkCommandBuffer cmd)> && function) const;
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 
+    // IMAGES
     AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
     AllocatedImage createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
     void destroyImage(const AllocatedImage &img) const;
+
+    // BUFFERS
+    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
+    void destroyBuffer(const AllocatedBuffer &buffer) const;
 
     void updateScene();
 private:
@@ -254,10 +261,6 @@ private:
     void initBackgroundPipelines();
     void initTrianglePipeline();
     void initMeshPipeline();
-
-    // BUFFERS
-    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
-    void destroyBuffer(const AllocatedBuffer &buffer) const;
 
     // MESHES
     void initDefaultData();

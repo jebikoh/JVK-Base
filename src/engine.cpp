@@ -60,9 +60,15 @@ void JVKEngine::init() {
 
     // CAMERA
     _mainCamera.velocity = glm::vec3(0.0f);
-    _mainCamera.position = glm::vec3(0.0f, 0.0f, 5.0f);
+    _mainCamera.position = glm::vec3(30.f, -00.f, -085.f);
     _mainCamera.pitch = 0.0f;
     _mainCamera.yaw = 0.0f;
+
+    // SCENE
+    std::string structurePath = "../assets/structure.glb";
+    auto structureFile = loadGLTF(this, structurePath);
+    assert(structureFile.has_value());
+    loadedScenes["structure"] = *structureFile;
 
     _isInitialized = true;
 }
@@ -70,6 +76,8 @@ void JVKEngine::init() {
 void JVKEngine::cleanup() {
     if (_isInitialized) {
         vkDeviceWaitIdle(_device);
+
+        loadedScenes.clear();
 
         // Frame data
         for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
@@ -1100,13 +1108,14 @@ void JVKEngine::updateScene() {
     proj[1][1] *= -1;
 
     _mainDrawContext.opaqueSurfaces.clear();
-    _loadedNodes["Suzanne"]->draw(glm::mat4{1.0f}, _mainDrawContext);
-
-    for (int x = -3; x < 3; ++x) {
-        glm::mat4 scale = glm::scale(glm::vec3{0.2});
-        glm::mat4 translation = glm::translate(glm::vec3{x, 1, 0});
-        _loadedNodes["Cube"]->draw(translation * scale, _mainDrawContext);
-    }
+    loadedScenes["structure"]->draw(glm::mat4(1.0f), _mainDrawContext);
+    // _loadedNodes["Suzanne"]->draw(glm::mat4{1.0f}, _mainDrawContext);
+    //
+    // for (int x = -3; x < 3; ++x) {
+    //     glm::mat4 scale = glm::scale(glm::vec3{0.2});
+    //     glm::mat4 translation = glm::translate(glm::vec3{x, 1, 0});
+    //     _loadedNodes["Cube"]->draw(translation * scale, _mainDrawContext);
+    // }
 
     sceneData.view = view;
     sceneData.proj = proj;
