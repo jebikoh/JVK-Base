@@ -66,7 +66,7 @@ void JVKEngine::init() {
     _mainCamera.yaw = 0.0f;
 
     // SCENE
-    std::string scenePath = "../assets/structure.glb";
+    std::string scenePath = "../assets/DamagedHelmet.glb";
     auto sceneFile = loadGLTF(this, scenePath);
     assert(sceneFile.has_value());
     loadedScenes["base_scene"] = *sceneFile;

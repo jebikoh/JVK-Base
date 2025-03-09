@@ -207,16 +207,25 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
     std::vector<std::shared_ptr<GLTFMaterial>> materials;
 
     // LOAD TEXTURES
+    int textureIndex = 0;
     for (fastgltf::Image &image: gltf.images) {
         std::optional<AllocatedImage> img = loadImage(engine, gltf, image);
+        std::string imgName;
+        if (image.name.empty()) {
+            imgName = "texture_" + std::to_string(textureIndex);
+        } else {
+            imgName = image.name;
+        }
 
         if (img.has_value()) {
             images.push_back(*img);
-            file.images[image.name.c_str()] = *img;
+            file.images[imgName] = *img;
+            fmt::print("Texture image loaded: {}\n", imgName);
         } else {
             images.push_back(engine->_errorCheckerboardImage);
-            fmt::print("GLTF failed to load texture: {}\n", image.name);
+            fmt::print("GLTF failed to load texture: {}\n", imgName);
         }
+        textureIndex++;
     }
 
     // LOAD MATERIALS
