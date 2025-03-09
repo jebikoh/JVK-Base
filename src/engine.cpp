@@ -1101,7 +1101,12 @@ AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat form
     memcpy(uploadBuffer.info.pMappedData, data, dataSize);
 
     // COPY TO IMAGE
-    AllocatedImage image = createImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT, mipmapped);
+    VkImageUsageFlags imgUsages = VK_IMAGE_USAGE_TRANSFER_DST_BIT | usage;
+    if (mipmapped) {
+        imgUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    }
+
+    AllocatedImage image = createImage(size, format, imgUsages, mipmapped);
     immediateSubmit([&](VkCommandBuffer cmd) {
         VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 

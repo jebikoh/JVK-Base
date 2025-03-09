@@ -214,6 +214,9 @@ public:
         int meshDrawTime;
     } _stats;
 
+    // MSAA
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+
     struct SDL_Window *_window = nullptr;
 
     static JVKEngine &get();

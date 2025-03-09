@@ -115,6 +115,9 @@ void VkUtil::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imag
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
         if (mip < mipLevels - 1) {
             VkImageBlit2 blit{};
+            blit.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+            blit.pNext = nullptr;
+
             blit.srcOffsets[1].x = imageSize.width;
             blit.srcOffsets[1].y = imageSize.height;
             blit.srcOffsets[1].z = 1;
