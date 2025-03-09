@@ -1117,7 +1117,12 @@ AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat form
         copyRegion.imageExtent                     = size;
 
         vkCmdCopyBufferToImage(cmd, uploadBuffer.buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-        VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        if (mipmapped) {
+            VkUtil::generateMipmaps(cmd, image.image, {image.imageExtent.width, image.imageExtent.height});
+        } else {
+            VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
     });
 
     destroyBuffer(uploadBuffer);

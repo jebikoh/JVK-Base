@@ -80,3 +80,74 @@ void VkUtil::copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkE
 
     vkCmdBlitImage2(cmd, &blitInfo);
 }
+
+void VkUtil::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize) {
+    const int mipLevels = static_cast<int>(std::floor(std::log2(std::max(imageSize.width, imageSize.height)))) + 1;
+    for (int mip = 0; mip < mipLevels; ++mip) {
+        VkExtent2D halfSize = imageSize;
+        halfSize.width /= 2;
+        halfSize.height /= 2;
+
+        VkImageMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrier.pNext = nullptr;
+
+        barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
+        barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        barrier.dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT;
+
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+        VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange = VkInit::imageSubresourceRange(aspectMask);
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseMipLevel = mip;
+        barrier.image = image;
+
+        VkDependencyInfo dependencyInfo{};
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependencyInfo.pNext = nullptr;
+        dependencyInfo.imageMemoryBarrierCount = 1;
+        dependencyInfo.pImageMemoryBarriers = &barrier;
+
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+        if (mip < mipLevels - 1) {
+            VkImageBlit2 blit{};
+            blit.srcOffsets[1].x = imageSize.width;
+            blit.srcOffsets[1].y = imageSize.height;
+            blit.srcOffsets[1].z = 1;
+
+            blit.dstOffsets[1].x = halfSize.width;
+            blit.dstOffsets[1].y = halfSize.height;
+            blit.dstOffsets[1].z = 1;
+
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.baseArrayLayer = 0;
+            blit.srcSubresource.layerCount = 1;
+            blit.srcSubresource.mipLevel = mip;
+
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.baseArrayLayer = 0;
+            blit.dstSubresource.layerCount = 1;
+            blit.dstSubresource.mipLevel = mip + 1;
+
+            VkBlitImageInfo2 blitInfo{};
+            blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+            blitInfo.pNext = nullptr;
+            blitInfo.srcImage = image;
+            blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            blitInfo.dstImage = image;
+            blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            blitInfo.filter = VK_FILTER_LINEAR;
+            blitInfo.regionCount = 1;
+            blitInfo.pRegions = &blit;
+
+            vkCmdBlitImage2(cmd, &blitInfo);
+            imageSize = halfSize;
+        }
+    }
+
+    transitionImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}

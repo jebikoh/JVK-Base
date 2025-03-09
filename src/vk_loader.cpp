@@ -14,6 +14,7 @@
 #include <stb_image.h>
 
 constexpr bool JVK_OVERRIDE_COLORS_WITH_NORMAL_MAP = false;
+constexpr bool JVK_LOADER_GENERATE_MIPMAPS = true;
 
 std::optional<AllocatedImage> loadImage(JVKEngine *engine, fastgltf::Asset &asset, fastgltf::Image &image) {
     AllocatedImage newImage{};
@@ -35,7 +36,7 @@ std::optional<AllocatedImage> loadImage(JVKEngine *engine, fastgltf::Asset &asse
                                imageSize.height = height;
                                imageSize.depth = 1;
 
-                               newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+                               newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, JVK_LOADER_GENERATE_MIPMAPS);
                                stbi_image_free(data);
                            }
                        },
@@ -48,7 +49,7 @@ std::optional<AllocatedImage> loadImage(JVKEngine *engine, fastgltf::Asset &asse
                                imageSize.height = height;
                                imageSize.depth = 1;
 
-                               newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+                               newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, JVK_LOADER_GENERATE_MIPMAPS);
                                stbi_image_free(data);
                            }
                        },
@@ -67,7 +68,7 @@ std::optional<AllocatedImage> loadImage(JVKEngine *engine, fastgltf::Asset &asse
                                                       imageSize.height = height;
                                                       imageSize.depth = 1;
 
-                                                      newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+                                                      newImage = engine->createImage(data, imageSize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, JVK_LOADER_GENERATE_MIPMAPS);
                                                       stbi_image_free(data);
                                                   }
                                               }
