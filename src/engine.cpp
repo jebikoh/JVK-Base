@@ -51,6 +51,7 @@ void JVKEngine::init() {
 
     initVulkan();
     initSwapchain();
+    initDrawImages();
     initCommands();
     initSyncStructures();
     initDescriptors();
@@ -139,7 +140,7 @@ void JVKEngine::cleanup() {
         vmaDestroyAllocator(_allocator);
 
         // Swapchain
-        destroySwapchain();
+        swapchain_.destroy(context_);
 
         // API
         context_.destroy();
@@ -159,7 +160,7 @@ void JVKEngine::draw() {
 
     // Request an image from swapchain
     uint32_t swapchainImageIndex;
-    VkResult e = vkAcquireNextImageKHR(context_.device, _swapchain, 1000000000, getCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex);
+    VkResult e = swapchain_.acquireNextImage(context_, getCurrentFrame().swapchainSemaphore, &swapchainImageIndex);
     if (e == VK_ERROR_OUT_OF_DATE_KHR) {
         _resizeRequested = true;
         return;
@@ -169,8 +170,8 @@ void JVKEngine::draw() {
     VkCommandBuffer cmd = getCurrentFrame().cmdBuffer;
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-    _drawExtent.width  = std::min(_swapchainExtent.width, _drawImage.imageExtent.width) * renderScale;
-    _drawExtent.height = std::min(_swapchainExtent.height, _drawImage.imageExtent.height) * renderScale;
+    _drawExtent.width  = std::min(swapchain_.extent.width, _drawImage.imageExtent.width) * renderScale;
+    _drawExtent.height = std::min(swapchain_.extent.height, _drawImage.imageExtent.height) * renderScale;
 
     // Start the command buffer
     VkCommandBufferBeginInfo cmdBeginInfo = VkInit::commandBufferBegin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -201,19 +202,19 @@ void JVKEngine::draw() {
     VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     // Transition swapchain image to transfer destination
-    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     // Copy image to from draw image to swapchain
-    VkUtil::copyImageToImage(cmd, _drawImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
+    VkUtil::copyImageToImage(cmd, _drawImage.image, swapchain_.images[swapchainImageIndex], _drawExtent, swapchain_.extent);
 
     // Transition swapchain to attachment optimal
-    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
     // Draw UI
-    drawImgui(cmd, _swapchainImageViews[swapchainImageIndex]);
+    drawImgui(cmd, swapchain_.imageViews[swapchainImageIndex]);
 
     // Transition swapchain for presentation
-    VkUtil::transitionImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     // End command buffer
     VK_CHECK(vkEndCommandBuffer(cmd));
@@ -233,7 +234,7 @@ void JVKEngine::draw() {
     presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.pNext              = nullptr;
     presentInfo.swapchainCount     = 1;
-    presentInfo.pSwapchains        = &_swapchain;
+    presentInfo.pSwapchains        = &swapchain_.swapchain;
     presentInfo.pWaitSemaphores    = &getCurrentFrame().renderSemaphore;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pImageIndices      = &swapchainImageIndex;
@@ -399,48 +400,7 @@ void JVKEngine::initVulkan() {
 }
 
 void JVKEngine::initSwapchain() {
-    createSwapchain(_windowExtent.width, _windowExtent.height);
-
-    // CREATE DRAW IMAGE
-    VkExtent3D drawImageExtent = {
-            _windowExtent.width,
-            _windowExtent.height,
-            1};
-
-    _drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;// 16-bit float image
-    _drawImage.imageExtent = drawImageExtent;
-
-    VkImageUsageFlags drawImageUsages = {};
-    drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // Copy from image
-    drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;    // Copy to image
-    drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;         // Allow compute shader to write
-    drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;// Graphics pipeline
-
-    VkImageCreateInfo drawImageInfo = VkInit::image(_drawImage.imageFormat, drawImageUsages, drawImageExtent);
-
-    // VMA_MEMORY_USAGE_GPU_ONLY: the texture will never be accessed from the CPU
-    // VK_MEMORY_PROPERTYcontext_.device_LOCAL_BIT: GPU exclusive memory flag, guarantees that the memory is on the GPU
-    VmaAllocationCreateInfo drawImageAllocInfo = {};
-    drawImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
-    drawImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    vmaCreateImage(_allocator, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
-
-    VkImageViewCreateInfo imageViewInfo = VkInit::imageView(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
-    VK_CHECK(vkCreateImageView(context_.device, &imageViewInfo, nullptr, &_drawImage.imageView));
-
-    // CREATE DEPTH IMAGE
-    _depthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
-    _depthImage.imageExtent = drawImageExtent;
-
-    VkImageUsageFlags depthImageUsages{};
-    depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-    VkImageCreateInfo depthImageInfo = VkInit::image(_depthImage.imageFormat, depthImageUsages, drawImageExtent);
-    vmaCreateImage(_allocator, &depthImageInfo, &drawImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
-
-    VkImageViewCreateInfo depthImageViewInfo = VkInit::imageView(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
-    VK_CHECK(vkCreateImageView(context_.device, &depthImageViewInfo, nullptr, &_depthImage.imageView));
+    swapchain_.init(context_, _windowExtent.width, _windowExtent.height);
 }
 
 void JVKEngine::initCommands() {
@@ -481,33 +441,6 @@ void JVKEngine::initSyncStructures() {
 
     // IMMEDIATE SUBMIT FENCE
     VK_CHECK(vkCreateFence(context_.device, &fenceCreateInfo, nullptr, &_immFence));
-}
-
-void JVKEngine::createSwapchain(uint32_t width, uint32_t height) {
-    vkb::SwapchainBuilder swapchainBuilder{context_.physicalDevice, context_.device, context_.surface};
-    _swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-
-    vkb::Swapchain vkbSwapchain = swapchainBuilder
-                                          .set_desired_format(
-                                                  VkSurfaceFormatKHR{
-                                                          .format     = _swapchainImageFormat,
-                                                          .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
-                                          .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-                                          .set_desired_extent(width, height)
-                                          .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                                          .build()
-                                          .value();
-    _swapchainExtent     = vkbSwapchain.extent;
-    _swapchain           = vkbSwapchain.swapchain;
-    _swapchainImages     = vkbSwapchain.get_images().value();
-    _swapchainImageViews = vkbSwapchain.get_image_views().value();
-}
-
-void JVKEngine::destroySwapchain() const {
-    vkDestroySwapchainKHR(context_.device, _swapchain, nullptr);
-    for (int i = 0; i < _swapchainImageViews.size(); ++i) {
-        vkDestroyImageView(context_.device, _swapchainImageViews[i], nullptr);
-    }
 }
 
 void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
@@ -707,7 +640,7 @@ void JVKEngine::initImgui() {
 
     initInfo.PipelineRenderingCreateInfo                         = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
     initInfo.PipelineRenderingCreateInfo.colorAttachmentCount    = 1;
-    initInfo.PipelineRenderingCreateInfo.pColorAttachmentFormats = &_swapchainImageFormat;
+    initInfo.PipelineRenderingCreateInfo.pColorAttachmentFormats = &swapchain_.imageFormat;
 
     initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -718,7 +651,7 @@ void JVKEngine::initImgui() {
 void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) const {
     // Setup color attachment for render pass
     VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    VkRenderingInfo renderInfo                = VkInit::rendering(_swapchainExtent, &colorAttachment, nullptr);
+    VkRenderingInfo renderInfo                = VkInit::rendering(swapchain_.extent, &colorAttachment, nullptr);
 
     // Render
     vkCmdBeginRendering(cmd, &renderInfo);
@@ -963,15 +896,15 @@ void JVKEngine::initDefaultData() {
 }
 
 void JVKEngine::resizeSwapchain() {
-    vkDeviceWaitIdle(context_.device);
-    destroySwapchain();
+    vkDeviceWaitIdle(context_);
+    swapchain_.destroy(context_);
 
     int w, h;
     SDL_GetWindowSize(_window, &w, &h);
     _windowExtent.width  = w;
     _windowExtent.height = h;
 
-    createSwapchain(_windowExtent.width, _windowExtent.height);
+    swapchain_.init(context_, _windowExtent.width, _windowExtent.height);
     _resizeRequested = false;
 }
 
@@ -1085,6 +1018,48 @@ VkSampleCountFlagBits JVKEngine::getMaxUsableSampleCount() {
     if (counts & VK_SAMPLE_COUNT_4_BIT) return VK_SAMPLE_COUNT_4_BIT;
     if (counts & VK_SAMPLE_COUNT_2_BIT) return VK_SAMPLE_COUNT_2_BIT;
     return VK_SAMPLE_COUNT_1_BIT;
+}
+
+void JVKEngine::initDrawImages() {
+    VkExtent3D drawImageExtent = {
+            _windowExtent.width,
+            _windowExtent.height,
+            1};
+
+    _drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;// 16-bit float image
+    _drawImage.imageExtent = drawImageExtent;
+
+    VkImageUsageFlags drawImageUsages = {};
+    drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // Copy from image
+    drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;    // Copy to image
+    drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;         // Allow compute shader to write
+    drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;// Graphics pipeline
+
+    VkImageCreateInfo drawImageInfo = VkInit::image(_drawImage.imageFormat, drawImageUsages, drawImageExtent);
+
+    // VMA_MEMORY_USAGE_GPU_ONLY: the texture will never be accessed from the CPU
+    // VK_MEMORY_PROPERTYcontext_.device_LOCAL_BIT: GPU exclusive memory flag, guarantees that the memory is on the GPU
+    VmaAllocationCreateInfo drawImageAllocInfo = {};
+    drawImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
+    drawImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vmaCreateImage(_allocator, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
+
+    VkImageViewCreateInfo imageViewInfo = VkInit::imageView(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+    VK_CHECK(vkCreateImageView(context_.device, &imageViewInfo, nullptr, &_drawImage.imageView));
+
+    // CREATE DEPTH IMAGE
+    _depthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
+    _depthImage.imageExtent = drawImageExtent;
+
+    VkImageUsageFlags depthImageUsages{};
+    depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+    VkImageCreateInfo depthImageInfo = VkInit::image(_depthImage.imageFormat, depthImageUsages, drawImageExtent);
+    vmaCreateImage(_allocator, &depthImageInfo, &drawImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
+
+    VkImageViewCreateInfo depthImageViewInfo = VkInit::imageView(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+    VK_CHECK(vkCreateImageView(context_.device, &depthImageViewInfo, nullptr, &_depthImage.imageView));
 }
 
 void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {

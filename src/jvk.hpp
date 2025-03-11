@@ -26,3 +26,5 @@
             abort();                                                    \
         }                                                               \
     } while (0)
+
+constexpr uint64_t JVK_TIMEOUT = 1000000000;

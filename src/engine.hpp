@@ -7,7 +7,9 @@
 #include <vk_descriptors.hpp>
 #include <vk_types.hpp>
 #include <camera.hpp>
+
 #include <vk/context.hpp>
+#include <vk/swapchain.hpp>
 
 class JVKEngine;
 
@@ -126,11 +128,7 @@ public:
     jvk::Context context_;
 
     // SWAPCHAIN
-    VkSwapchainKHR _swapchain;
-    VkFormat _swapchainImageFormat;
-    std::vector<VkImage> _swapchainImages;
-    std::vector<VkImageView> _swapchainImageViews;
-    VkExtent2D _swapchainExtent;
+    jvk::Swapchain swapchain_;
 
     // FRAME DATA
     FrameData _frames[JVK_NUM_FRAMES];
@@ -241,17 +239,12 @@ private:
     // INITIALIZATION
     void initVulkan();
     void initSwapchain();
+    void initDrawImages();
     void initCommands();
     void initSyncStructures();
     void initDescriptors();
     void initPipelines();
     void initImgui();
-
-    // CREATION
-    void createSwapchain(uint32_t width, uint32_t height);
-
-    // DESTRUCTION
-    void destroySwapchain() const;
 
     // DRAW
     void drawBackground(VkCommandBuffer cmd) const;
