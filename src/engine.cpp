@@ -45,8 +45,8 @@ void JVKEngine::init() {
             "JVK",
             SDL_WINDOWPOS_UNDEFINED,
             SDL_WINDOWPOS_UNDEFINED,
-            _windowExtent.width,
-            _windowExtent.height,
+            windowExtent_.width,
+            windowExtent_.height,
             windowFlags);
 
     initVulkan();
@@ -71,28 +71,28 @@ void JVKEngine::init() {
     assert(sceneFile.has_value());
     loadedScenes["base_scene"] = *sceneFile;
 
-    _isInitialized = true;
+    isInitialized_ = true;
     fmt::print("Engine initialized\n");
 }
 
 void JVKEngine::cleanup() {
-    if (_isInitialized) {
+    if (isInitialized_) {
         vkDeviceWaitIdle(context_.device);
 
         loadedScenes.clear();
 
         // Frame data
         for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-            vkDestroyCommandPool(context_.device, _frames[i].cmdPool, nullptr);
+            frames_[i].cmdPool.destroy();
 
             // Frame sync
-            vkDestroyFence(context_.device, _frames[i].renderFence, nullptr);
-            vkDestroySemaphore(context_.device, _frames[i].renderSemaphore, nullptr);
-            vkDestroySemaphore(context_.device, _frames[i].swapchainSemaphore, nullptr);
+            frames_[i].renderFence.destroy();
+            frames_[i].renderSemaphore.destroy();
+            frames_[i].swapchainSemaphore.destroy();
 
-            _frames[i].deletionQueue.flush();
+            frames_[i].deletionQueue.flush();
 
-            _frames[i].frameDescriptors.destroyPools(context_.device);
+            frames_[i].frameDescriptors.destroyPools(context_.device);
         }
 
         // Textures
@@ -112,8 +112,8 @@ void JVKEngine::cleanup() {
         vkDestroyDescriptorPool(context_.device, _imguiPool, nullptr);
 
         // Immediate command pool
-        vkDestroyCommandPool(context_.device, _immCommandPool, nullptr);
-        vkDestroyFence(context_.device, _immFence, nullptr);
+        _immCommandPool.destroy();
+        _immFence.destroy();
 
         _globalDeletionQueue.flush();
 
@@ -153,10 +153,10 @@ void JVKEngine::cleanup() {
 void JVKEngine::draw() {
     updateScene();
     // Wait and reset render fence
-    VK_CHECK(vkWaitForFences(context_.device, 1, &getCurrentFrame().renderFence, true, 1000000000));
+    VK_CHECK(getCurrentFrame().renderFence.wait());
     getCurrentFrame().frameDescriptors.clearPools(context_.device);
 
-    VK_CHECK(vkResetFences(context_.device, 1, &getCurrentFrame().renderFence));
+    VK_CHECK(getCurrentFrame().renderFence.reset());
 
     // Request an image from swapchain
     uint32_t swapchainImageIndex;
@@ -235,7 +235,7 @@ void JVKEngine::draw() {
     presentInfo.pNext              = nullptr;
     presentInfo.swapchainCount     = 1;
     presentInfo.pSwapchains        = &swapchain_.swapchain;
-    presentInfo.pWaitSemaphores    = &getCurrentFrame().renderSemaphore;
+    presentInfo.pWaitSemaphores    = &getCurrentFrame().renderSemaphore.semaphore;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pImageIndices      = &swapchainImageIndex;
 
@@ -245,7 +245,7 @@ void JVKEngine::draw() {
         _resizeRequested = true;
     }
 
-    _frameNumber++;
+    frameNumber_++;
 }
 
 void JVKEngine::run() {
@@ -268,10 +268,10 @@ void JVKEngine::run() {
 
             if (e.type == SDL_WINDOWEVENT) {
                 if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) {
-                    _stopRendering = true;
+                    stopRendering_ = true;
                 }
                 if (e.window.event == SDL_WINDOWEVENT_RESTORED) {
-                    _stopRendering = false;
+                    stopRendering_ = false;
                 }
             }
 
@@ -279,7 +279,7 @@ void JVKEngine::run() {
             ImGui_ImplSDL2_ProcessEvent(&e);
         }
 
-        if (_stopRendering) {
+        if (stopRendering_) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
@@ -400,52 +400,38 @@ void JVKEngine::initVulkan() {
 }
 
 void JVKEngine::initSwapchain() {
-    swapchain_.init(context_, _windowExtent.width, _windowExtent.height);
+    swapchain_.init(context_, windowExtent_.width, windowExtent_.height);
 }
 
 void JVKEngine::initCommands() {
     // COMMAND POOL
     // Indicate that buffers should be individually resettable
     VkCommandPoolCreateFlags flags          = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    VkCommandPoolCreateInfo commandPoolInfo = VkInit::commandPool(_graphicsQueueFamily, flags);
 
     // COMMAND BUFFERS
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-        VK_CHECK(vkCreateCommandPool(context_.device, &commandPoolInfo, nullptr, &_frames[i].cmdPool));
-
-        VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBuffer(_frames[i].cmdPool);
-
-        VK_CHECK(vkAllocateCommandBuffers(context_.device, &cmdAllocInfo, &_frames[i].cmdBuffer));
+        VK_CHECK(frames_[i].cmdPool.init(context_, _graphicsQueueFamily, flags));
+        VK_CHECK(frames_[i].cmdPool.allocateCommandBuffer(&frames_[i].cmdBuffer));
     }
 
     // IMMEDIATE BUFFERS
-    VK_CHECK(vkCreateCommandPool(context_.device, &commandPoolInfo, nullptr, &_immCommandPool));
+    VK_CHECK(_immCommandPool.init(context_, _graphicsQueueFamily, flags));
     VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBuffer(_immCommandPool, 1);
     VK_CHECK(vkAllocateCommandBuffers(context_.device, &cmdAllocInfo, &_immCommandBuffer));
 }
 
 void JVKEngine::initSyncStructures() {
-    // FENCE
-    // Start signaled to wait on the first frame
-    VkFenceCreateInfo fenceCreateInfo = VkInit::fence(VK_FENCE_CREATE_SIGNALED_BIT);
-
-    // SEMAPHORE
-    VkSemaphoreCreateInfo semaphoreCreateInfo = VkInit::semaphore();
-
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-        VK_CHECK(vkCreateFence(context_.device, &fenceCreateInfo, nullptr, &_frames[i].renderFence));
-
-        VK_CHECK(vkCreateSemaphore(context_.device, &semaphoreCreateInfo, nullptr, &_frames[i].swapchainSemaphore));
-        VK_CHECK(vkCreateSemaphore(context_.device, &semaphoreCreateInfo, nullptr, &_frames[i].renderSemaphore));
+        VK_CHECK(frames_[i].renderFence.init(context_, VK_FENCE_CREATE_SIGNALED_BIT));
+        VK_CHECK(frames_[i].swapchainSemaphore.init(context_));
+        VK_CHECK(frames_[i].renderSemaphore.init(context_));
     }
-
-    // IMMEDIATE SUBMIT FENCE
-    VK_CHECK(vkCreateFence(context_.device, &fenceCreateInfo, nullptr, &_immFence));
+    VK_CHECK(_immFence.init(context_, VK_FENCE_CREATE_SIGNALED_BIT));
 }
 
 void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
     VkClearColorValue clearValue;
-    float flash = std::abs(std::sin(_frameNumber / 120.0f));
+    float flash = std::abs(std::sin(frameNumber_ / 120.0f));
     clearValue  = {{0.0f, 0.0f, flash, 1.0f}};
 
     VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
@@ -488,8 +474,8 @@ void JVKEngine::initDescriptors() {
                 {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
         };
 
-        _frames[i].frameDescriptors = DynamicDescriptorAllocator();
-        _frames[i].frameDescriptors.init(context_.device, 1000, frameSizes);
+        frames_[i].frameDescriptors = DynamicDescriptorAllocator();
+        frames_[i].frameDescriptors.init(context_.device, 1000, frameSizes);
     }
 
     // GPU SCENE DATA
@@ -582,7 +568,7 @@ void JVKEngine::initBackgroundPipelines() {
 
 void JVKEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)> &&function) const {
     // Reset fence & buffer
-    VK_CHECK(vkResetFences(context_.device, 1, &_immFence));
+    VK_CHECK(_immFence.reset());
     VK_CHECK(vkResetCommandBuffer(_immCommandBuffer, 0));
 
     // Create and start buffer
@@ -600,7 +586,7 @@ void JVKEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)> &&funct
     VkCommandBufferSubmitInfo cmdInfo = VkInit::commandBufferSubmit(cmd);
     VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, nullptr, nullptr);
     VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immFence));
-    VK_CHECK(vkWaitForFences(context_.device, 1, &_immFence, true, 9999999999));
+    VK_CHECK(vkWaitForFences(context_.device, 1, &_immFence.fence, true, 9999999999));
 }
 
 void JVKEngine::initImgui() {
@@ -901,10 +887,10 @@ void JVKEngine::resizeSwapchain() {
 
     int w, h;
     SDL_GetWindowSize(_window, &w, &h);
-    _windowExtent.width  = w;
-    _windowExtent.height = h;
+    windowExtent_.width  = w;
+    windowExtent_.height = h;
 
-    swapchain_.init(context_, _windowExtent.width, _windowExtent.height);
+    swapchain_.init(context_, windowExtent_.width, windowExtent_.height);
     _resizeRequested = false;
 }
 
@@ -987,7 +973,7 @@ void JVKEngine::updateScene() {
 
     _mainCamera.update();
     glm::mat4 view = _mainCamera.getViewMatrix();
-    glm::mat4 proj = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 0.1f, 10000.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(70.f), static_cast<float>(windowExtent_.width) / static_cast<float>(windowExtent_.height), 0.1f, 10000.0f);
     proj[1][1] *= -1;
 
     _mainDrawContext.opaqueSurfaces.clear();
@@ -1022,8 +1008,8 @@ VkSampleCountFlagBits JVKEngine::getMaxUsableSampleCount() {
 
 void JVKEngine::initDrawImages() {
     VkExtent3D drawImageExtent = {
-            _windowExtent.width,
-            _windowExtent.height,
+            windowExtent_.width,
+            windowExtent_.height,
             1};
 
     _drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;// 16-bit float image

@@ -2,7 +2,7 @@
 
 #include <VkBootstrap.h>
 #include <jvk.hpp>
-#include <vk/context.hpp>
+#include <jvk/context.hpp>
 
 namespace jvk {
 

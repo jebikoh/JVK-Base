@@ -8,8 +8,11 @@
 #include <vk_types.hpp>
 #include <camera.hpp>
 
-#include <vk/context.hpp>
-#include <vk/swapchain.hpp>
+#include <jvk/context.hpp>
+#include <jvk/swapchain.hpp>
+#include <jvk/commands.hpp>
+#include <jvk/fence.hpp>
+#include <jvk/semaphore.hpp>
 
 class JVKEngine;
 
@@ -98,7 +101,7 @@ struct DeletionQueue {
 
 struct FrameData {
     // FRAME COMMANDS
-    VkCommandPool cmdPool;
+    jvk::CommandPool cmdPool;
     VkCommandBuffer cmdBuffer;
 
     // FRAME SYNC
@@ -107,9 +110,9 @@ struct FrameData {
     //  2. Control presentation of rendered image to OS after draw
     // Fences:
     //  1. Wait for draw commands of a submitted cmd buffer to be finished
-    VkSemaphore swapchainSemaphore;
-    VkSemaphore renderSemaphore;
-    VkFence renderFence;
+    jvk::Semaphore swapchainSemaphore;
+    jvk::Semaphore renderSemaphore;
+    jvk::Fence renderFence;
 
     DeletionQueue deletionQueue;
     DynamicDescriptorAllocator frameDescriptors;
@@ -119,20 +122,17 @@ constexpr unsigned int JVK_NUM_FRAMES = 2;
 
 class JVKEngine {
 public:
-    bool _isInitialized = false;
-    int _frameNumber    = 0;
-    bool _stopRendering = false;
-    VkExtent2D _windowExtent{1700, 900};
+    bool isInitialized_ = false;
+    int frameNumber_    = 0;
+    bool stopRendering_ = false;
+    VkExtent2D windowExtent_{1700, 900};
 
-    // VULKAN INSTANCE
     jvk::Context context_;
-
-    // SWAPCHAIN
     jvk::Swapchain swapchain_;
 
     // FRAME DATA
-    FrameData _frames[JVK_NUM_FRAMES];
-    FrameData &getCurrentFrame() { return _frames[_frameNumber % JVK_NUM_FRAMES]; }
+    FrameData frames_[JVK_NUM_FRAMES];
+    FrameData &getCurrentFrame() { return frames_[frameNumber_ % JVK_NUM_FRAMES]; }
 
     // QUEUE
     VkQueue _graphicsQueue;
@@ -160,9 +160,9 @@ public:
     VkPipelineLayout _gradientPipelineLayout;
 
     // IMMEDIATE COMMANDS
-    VkFence _immFence;
+    jvk::Fence _immFence;
+    jvk::CommandPool _immCommandPool;
     VkCommandBuffer _immCommandBuffer;
-    VkCommandPool _immCommandPool;
 
     // IMGUI
     VkDescriptorPool _imguiPool;

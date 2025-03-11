@@ -23,6 +23,12 @@ add_executable(JVK_Engine src/main.cpp
         src/vk_loader.cpp
         src/camera.hpp
         src/camera.cpp
+        src/jvk/commands.hpp
+        src/jvk/context.hpp
+        src/jvk/swapchain.hpp
+        src/jvk/commands.cpp
+        src/jvk/semaphore.hpp
+        src/jvk/fence.hpp
 )
 
 if (JVK_ENABLE_PERF_FLAGS)
@@ -42,10 +48,7 @@ add_subdirectory(include/vma)
 add_subdirectory(include/sdl EXCLUDE_FROM_ALL)
 
 # GLM
-add_library(glm INTERFACE
-        src/vk/context.hpp
-        src/vk/swapchain.hpp
-)
+add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE include/glm)
 
 # ImGUI
