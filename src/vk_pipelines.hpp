@@ -36,6 +36,8 @@ struct PipelineBuilder {
 
     // Multisampling
     void setMultiSamplingNone();
+    void enableMultiSampling(VkSampleCountFlagBits sampleCount);
+    void enableSampleShading(VkSampleCountFlagBits sampleCount, float minSampleShading);
 
     // Blending
     void disableBlending();

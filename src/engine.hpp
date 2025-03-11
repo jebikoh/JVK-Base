@@ -124,7 +124,7 @@ public:
     // VULKAN INSTANCE
     VkInstance _instance;
     VkDebugUtilsMessengerEXT _debugMessenger;
-    VkPhysicalDevice _chosenGPU;
+    VkPhysicalDevice _physDevice;
     VkDevice _device;
     VkSurfaceKHR _surface;
 
@@ -163,12 +163,6 @@ public:
     int currentComputeEffect{0};
     VkPipeline _gradientPipeline;
     VkPipelineLayout _gradientPipelineLayout;
-
-    VkPipelineLayout _trianglePipelineLayout;
-    VkPipeline _trianglePipeline;
-
-    VkPipelineLayout _meshPipelineLayout;
-    VkPipeline _meshPipeline;
 
     // IMMEDIATE COMMANDS
     VkFence _immFence;
@@ -215,7 +209,8 @@ public:
     } _stats;
 
     // MSAA
-    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits _maxMsaaSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits _selectedMsaaSamples = VK_SAMPLE_COUNT_4_BIT;
 
     struct SDL_Window *_window = nullptr;
 
@@ -233,7 +228,7 @@ public:
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 
     // IMAGES
-    AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
+    AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT) const;
     AllocatedImage createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
     void destroyImage(const AllocatedImage &img) const;
 
@@ -268,9 +263,10 @@ private:
 
     // PIPELINES
     void initBackgroundPipelines();
-    void initTrianglePipeline();
-    void initMeshPipeline();
 
     // MESHES
     void initDefaultData();
+
+    // MSAA
+    VkSampleCountFlagBits getMaxUsableSampleCount();
 };

@@ -117,13 +117,7 @@ void JVKEngine::cleanup() {
 
         _globalDeletionQueue.flush();
 
-        // Pipelines
-        vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
-        vkDestroyPipeline(_device, _meshPipeline, nullptr);
-
-        vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
-        vkDestroyPipeline(_device, _trianglePipeline, nullptr);
-
+        // PIPELINES
         vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
         vkDestroyPipeline(_device, computeEffects[0].pipeline, nullptr);
         vkDestroyPipeline(_device, computeEffects[1].pipeline, nullptr);
@@ -390,7 +384,7 @@ void JVKEngine::initVulkan() {
     vkb::DeviceBuilder deviceBuilder{vkbPhysicalDevice};
     vkb::Device vkbDevice = deviceBuilder.build().value();
     _device               = vkbDevice.device;
-    _chosenGPU            = vkbPhysicalDevice.physical_device;
+    _physDevice           = vkbPhysicalDevice.physical_device;
 
     // QUEUE
     _graphicsQueue       = vkbDevice.get_queue(vkb::QueueType::graphics).value();
@@ -398,11 +392,14 @@ void JVKEngine::initVulkan() {
 
     // VMA
     VmaAllocatorCreateInfo allocatorInfo = {};
-    allocatorInfo.physicalDevice         = _chosenGPU;
+    allocatorInfo.physicalDevice         = _physDevice;
     allocatorInfo.device                 = _device;
     allocatorInfo.instance               = _instance;
     allocatorInfo.flags                  = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
     vmaCreateAllocator(&allocatorInfo, &_allocator);
+
+    // MSAA
+    _maxMsaaSamples = getMaxUsableSampleCount();
 }
 
 void JVKEngine::initSwapchain() {
@@ -491,7 +488,7 @@ void JVKEngine::initSyncStructures() {
 }
 
 void JVKEngine::createSwapchain(uint32_t width, uint32_t height) {
-    vkb::SwapchainBuilder swapchainBuilder{_chosenGPU, _device, _surface};
+    vkb::SwapchainBuilder swapchainBuilder{_physDevice, _device, _surface};
     _swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
 
     vkb::Swapchain vkbSwapchain = swapchainBuilder
@@ -583,8 +580,6 @@ void JVKEngine::initDescriptors() {
 
 void JVKEngine::initPipelines() {
     initBackgroundPipelines();
-    initTrianglePipeline();
-    initMeshPipeline();
     _metallicRoughnessMaterial.buildPipelines(this);
 }
 
@@ -706,7 +701,7 @@ void JVKEngine::initImgui() {
 
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.Instance            = _instance;
-    initInfo.PhysicalDevice      = _chosenGPU;
+    initInfo.PhysicalDevice      = _physDevice;
     initInfo.Device              = _device;
     initInfo.Queue               = _graphicsQueue;
     initInfo.DescriptorPool      = _imguiPool;
@@ -733,86 +728,6 @@ void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) cons
     vkCmdBeginRendering(cmd, &renderInfo);
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
     vkCmdEndRendering(cmd);
-}
-
-void JVKEngine::initTrianglePipeline() {
-    // LOAD SHADER MODULES
-    VkShaderModule triangleFragShader;
-    if (!VkUtil::loadShaderModule("../shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
-        fmt::print("Error when building triangle fragment shader module");
-    }
-
-    VkShaderModule triangleVertShader;
-    if (!VkUtil::loadShaderModule("../shaders/colored_triangle.vert.spv", _device, &triangleVertShader)) {
-        fmt::print("Error when building triangle vertex shader module");
-    }
-
-    // CREATE PIPELINE LAYOUT
-    VkPipelineLayoutCreateInfo piplineLayoutInfo = VkInit::pipelineLayout();
-    VK_CHECK(vkCreatePipelineLayout(_device, &piplineLayoutInfo, nullptr, &_trianglePipelineLayout));
-
-    // CREATE PIPELINE
-    VkUtil::PipelineBuilder pipelineBuilder;
-    pipelineBuilder._pipelineLayout = _trianglePipelineLayout;
-    pipelineBuilder.setShaders(triangleVertShader, triangleFragShader);
-    pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-    pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-    pipelineBuilder.setMultiSamplingNone();
-    pipelineBuilder.disableBlending();
-    pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
-    pipelineBuilder.setColorAttachmentFormat(_drawImage.imageFormat);
-    pipelineBuilder.setDepthAttachmentFormat(_depthImage.imageFormat);
-    _trianglePipeline = pipelineBuilder.buildPipeline(_device);
-
-    // CLEAN UP SHADER MODULES
-    vkDestroyShaderModule(_device, triangleVertShader, nullptr);
-    vkDestroyShaderModule(_device, triangleFragShader, nullptr);
-}
-
-void JVKEngine::initMeshPipeline() {
-    // LOAD SHADER MODULES
-    VkShaderModule triangleVertShader;
-    if (!VkUtil::loadShaderModule("../shaders/colored_triangle_mesh.vert.spv", _device, &triangleVertShader)) {
-        fmt::print("Error when building triangle vertex shader module");
-    }
-
-    VkShaderModule triangleFragShader;
-    if (!VkUtil::loadShaderModule("../shaders/tex_image.frag.spv", _device, &triangleFragShader)) {
-        fmt::print("Error when building triangle fragment shader module");
-    }
-
-    // PUSH CONSTANTS
-    VkPushConstantRange bufferRange{};
-    bufferRange.offset     = 0;
-    bufferRange.size       = sizeof(GPUDrawPushConstants);
-    bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    // CREATE PIPELINE LAYOUT
-    VkPipelineLayoutCreateInfo info = VkInit::pipelineLayout();
-    info.pPushConstantRanges        = &bufferRange;
-    info.pushConstantRangeCount     = 1;
-    info.pSetLayouts                = &_singleImageDescriptorLayout;
-    info.setLayoutCount             = 1;
-    VK_CHECK(vkCreatePipelineLayout(_device, &info, nullptr, &_meshPipelineLayout));
-
-    // CREATE PIPELINE
-    VkUtil::PipelineBuilder builder;
-    builder._pipelineLayout = _meshPipelineLayout;
-    builder.setShaders(triangleVertShader, triangleFragShader);
-    builder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    builder.setPolygonMode(VK_POLYGON_MODE_FILL);
-    builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-    builder.setMultiSamplingNone();
-    builder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
-    //    builder.enableBlendingAdditive();
-    builder.disableBlending();
-    builder.setColorAttachmentFormat(_drawImage.imageFormat);
-    builder.setDepthAttachmentFormat(_depthImage.imageFormat);
-    _meshPipeline = builder.buildPipeline(_device);
-
-    vkDestroyShaderModule(_device, triangleFragShader, nullptr);
-    vkDestroyShaderModule(_device, triangleVertShader, nullptr);
 }
 
 void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
@@ -1064,12 +979,12 @@ void JVKEngine::resizeSwapchain() {
     _resizeRequested = false;
 }
 
-AllocatedImage  JVKEngine::createImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
+AllocatedImage  JVKEngine::createImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped, const VkSampleCountFlagBits sampleCount) const {
     // IMAGE
     AllocatedImage image;
     image.imageFormat           = format;
     image.imageExtent           = size;
-    VkImageCreateInfo imageInfo = VkInit::image(format, usage, size);
+    VkImageCreateInfo imageInfo = VkInit::image(format, usage, size, sampleCount);
     if (mipmapped) {
         imageInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
     }
@@ -1160,6 +1075,20 @@ void JVKEngine::updateScene() {
     auto end = std::chrono::system_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     _stats.sceneUpdateTime = elapsed.count() / 1000.0f;
+}
+
+VkSampleCountFlagBits JVKEngine::getMaxUsableSampleCount() {
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(_physDevice, &props);
+
+    VkSampleCountFlags counts = props.limits.framebufferColorSampleCounts & props.limits.framebufferDepthSampleCounts;
+    if (counts & VK_SAMPLE_COUNT_64_BIT) return VK_SAMPLE_COUNT_64_BIT;
+    if (counts & VK_SAMPLE_COUNT_32_BIT) return VK_SAMPLE_COUNT_32_BIT;
+    if (counts & VK_SAMPLE_COUNT_16_BIT) return VK_SAMPLE_COUNT_16_BIT;
+    if (counts & VK_SAMPLE_COUNT_8_BIT) return VK_SAMPLE_COUNT_8_BIT;
+    if (counts & VK_SAMPLE_COUNT_4_BIT) return VK_SAMPLE_COUNT_4_BIT;
+    if (counts & VK_SAMPLE_COUNT_2_BIT) return VK_SAMPLE_COUNT_2_BIT;
+    return VK_SAMPLE_COUNT_1_BIT;
 }
 
 void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {

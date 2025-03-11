@@ -71,6 +71,25 @@ void VkUtil::PipelineBuilder::setMultiSamplingNone() {
     _multisampling.alphaToOneEnable      = VK_FALSE;
 }
 
+void VkUtil::PipelineBuilder::enableMultiSampling(VkSampleCountFlagBits sampleCount) {
+    _multisampling.rasterizationSamples  = sampleCount;
+    _multisampling.sampleShadingEnable   = VK_FALSE;
+    _multisampling.minSampleShading      = 1.0f;
+    _multisampling.pSampleMask           = nullptr;
+    _multisampling.alphaToCoverageEnable = VK_FALSE;
+    _multisampling.alphaToOneEnable      = VK_FALSE;
+}
+
+void VkUtil::PipelineBuilder::enableSampleShading(VkSampleCountFlagBits sampleCount, float minSampleShading) {
+    _multisampling.rasterizationSamples  = sampleCount;
+    _multisampling.sampleShadingEnable   = VK_TRUE;
+    _multisampling.minSampleShading      = minSampleShading;
+    _multisampling.pSampleMask           = nullptr;
+    _multisampling.alphaToCoverageEnable = VK_FALSE;
+    _multisampling.alphaToOneEnable      = VK_FALSE;
+}
+
+
 void VkUtil::PipelineBuilder::disableBlending() {
     _colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     _colorBlendAttachment.blendEnable    = VK_FALSE;
