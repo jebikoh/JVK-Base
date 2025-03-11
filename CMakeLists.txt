@@ -94,13 +94,8 @@ target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL
 find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
 
 set(GLSL_SOURCE_FILES
-        "${PROJECT_SOURCE_DIR}/shaders/gradient.comp"
         "${PROJECT_SOURCE_DIR}/shaders/gradient_pc.comp"
         "${PROJECT_SOURCE_DIR}/shaders/sky.comp"
-        "${PROJECT_SOURCE_DIR}/shaders/colored_triangle.frag"
-        "${PROJECT_SOURCE_DIR}/shaders/colored_triangle.vert"
-        "${PROJECT_SOURCE_DIR}/shaders/colored_triangle_mesh.vert"
-        "${PROJECT_SOURCE_DIR}/shaders/tex_image.frag"
         "${PROJECT_SOURCE_DIR}/shaders/mesh.frag"
         "${PROJECT_SOURCE_DIR}/shaders/mesh.vert"
 )
