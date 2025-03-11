@@ -115,8 +115,6 @@ void JVKEngine::cleanup() {
         _immCommandPool.destroy();
         _immFence.destroy();
 
-        _globalDeletionQueue.flush();
-
         // PIPELINES
         vkDestroyPipelineLayout(context_.device, _gradientPipelineLayout, nullptr);
         vkDestroyPipeline(context_.device, computeEffects[0].pipeline, nullptr);
@@ -130,14 +128,14 @@ void JVKEngine::cleanup() {
 
         // Depth image
         vkDestroyImageView(context_.device, _depthImage.imageView, nullptr);
-        vmaDestroyImage(_allocator, _depthImage.image, _depthImage.allocation);
+        vmaDestroyImage(allocator_, _depthImage.image, _depthImage.allocation);
 
         // Draw image
         vkDestroyImageView(context_.device, _drawImage.imageView, nullptr);
-        vmaDestroyImage(_allocator, _drawImage.image, _drawImage.allocation);
+        vmaDestroyImage(allocator_, _drawImage.image, _drawImage.allocation);
 
         // VMA
-        vmaDestroyAllocator(_allocator);
+        vmaDestroyAllocator(allocator_);
 
         // Swapchain
         swapchain_.destroy(context_);
@@ -223,11 +221,11 @@ void JVKEngine::draw() {
     // srcStageMask set to COLOR_ATTACHMENT_OUTPUT_BIT to wait for color attachment output (waiting for swapchain image)
     // dstStageMask set to ALL_GRAPHICS_BIT to signal that all graphics stages are done
     VkCommandBufferSubmitInfo cmdInfo = VkInit::commandBufferSubmit(cmd);
-    VkSemaphoreSubmitInfo waitInfo    = VkInit::semaphoreSubmit(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, getCurrentFrame().swapchainSemaphore);
-    VkSemaphoreSubmitInfo signalInfo  = VkInit::semaphoreSubmit(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, getCurrentFrame().renderSemaphore);
+    VkSemaphoreSubmitInfo waitInfo    = getCurrentFrame().swapchainSemaphore.submitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    VkSemaphoreSubmitInfo signalInfo  = getCurrentFrame().renderSemaphore.submitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
     VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, &signalInfo, &waitInfo);
 
-    VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, getCurrentFrame().renderFence));
+    VK_CHECK(vkQueueSubmit2(graphicsQueue_, 1, &submit, getCurrentFrame().renderFence));
 
     // Present
     VkPresentInfoKHR presentInfo   = {};
@@ -240,7 +238,7 @@ void JVKEngine::draw() {
     presentInfo.pImageIndices      = &swapchainImageIndex;
 
 
-    VkResult presentResult = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
+    VkResult presentResult = vkQueuePresentKHR(graphicsQueue_, &presentInfo);
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
         _resizeRequested = true;
     }
@@ -384,8 +382,8 @@ void JVKEngine::initVulkan() {
     context_.physicalDevice           = vkbPhysicalDevice.physical_device;
 
     // QUEUE
-    _graphicsQueue       = vkbDevice.get_queue(vkb::QueueType::graphics).value();
-    _graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+    graphicsQueue_.queue       = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+    graphicsQueue_.family = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 
     // VMA
     VmaAllocatorCreateInfo allocatorInfo = {};
@@ -393,7 +391,7 @@ void JVKEngine::initVulkan() {
     allocatorInfo.device                 = context_.device;
     allocatorInfo.instance               = context_.instance;
     allocatorInfo.flags                  = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-    vmaCreateAllocator(&allocatorInfo, &_allocator);
+    vmaCreateAllocator(&allocatorInfo, &allocator_);
 
     // MSAA
     _maxMsaaSamples = getMaxUsableSampleCount();
@@ -410,12 +408,12 @@ void JVKEngine::initCommands() {
 
     // COMMAND BUFFERS
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-        VK_CHECK(frames_[i].cmdPool.init(context_, _graphicsQueueFamily, flags));
+        VK_CHECK(frames_[i].cmdPool.init(context_, graphicsQueue_.family, flags));
         VK_CHECK(frames_[i].cmdPool.allocateCommandBuffer(&frames_[i].cmdBuffer));
     }
 
     // IMMEDIATE BUFFERS
-    VK_CHECK(_immCommandPool.init(context_, _graphicsQueueFamily, flags));
+    VK_CHECK(_immCommandPool.init(context_, graphicsQueue_.family, flags));
     VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBuffer(_immCommandPool, 1);
     VK_CHECK(vkAllocateCommandBuffers(context_.device, &cmdAllocInfo, &_immCommandBuffer));
 }
@@ -585,7 +583,7 @@ void JVKEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)> &&funct
     // Submit and wait for fence
     VkCommandBufferSubmitInfo cmdInfo = VkInit::commandBufferSubmit(cmd);
     VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, nullptr, nullptr);
-    VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immFence));
+    VK_CHECK(vkQueueSubmit2(graphicsQueue_, 1, &submit, _immFence));
     VK_CHECK(vkWaitForFences(context_.device, 1, &_immFence.fence, true, 9999999999));
 }
 
@@ -618,7 +616,7 @@ void JVKEngine::initImgui() {
     initInfo.Instance            = context_;
     initInfo.PhysicalDevice      = context_;
     initInfo.Device              = context_;
-    initInfo.Queue               = _graphicsQueue;
+    initInfo.Queue               = graphicsQueue_;
     initInfo.DescriptorPool      = _imguiPool;
     initInfo.MinImageCount       = 3;
     initInfo.ImageCount          = 3;
@@ -773,12 +771,12 @@ AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usa
     allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
     AllocatedBuffer buffer;
-    VK_CHECK(vmaCreateBuffer(_allocator, &info, &allocInfo, &buffer.buffer, &buffer.allocation, &buffer.info));
+    VK_CHECK(vmaCreateBuffer(allocator_, &info, &allocInfo, &buffer.buffer, &buffer.allocation, &buffer.info));
     return buffer;
 }
 
 void JVKEngine::destroyBuffer(const AllocatedBuffer &buffer) const {
-    vmaDestroyBuffer(_allocator, buffer.buffer, buffer.allocation);
+    vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
 }
 
 GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const {
@@ -908,7 +906,7 @@ AllocatedImage  JVKEngine::createImage(const VkExtent3D size, const VkFormat for
     VmaAllocationCreateInfo allocInfo{};
     allocInfo.usage         = VMA_MEMORY_USAGE_GPU_ONLY;
     allocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    VK_CHECK(vmaCreateImage(_allocator, &imageInfo, &allocInfo, &image.image, &image.allocation, nullptr));
+    VK_CHECK(vmaCreateImage(allocator_, &imageInfo, &allocInfo, &image.image, &image.allocation, nullptr));
 
     // DEPTH
     VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -965,7 +963,7 @@ AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat form
 }
 void JVKEngine::destroyImage(const AllocatedImage &img) const {
     vkDestroyImageView(context_.device, img.imageView, nullptr);
-    vmaDestroyImage(_allocator, img.image, img.allocation);
+    vmaDestroyImage(allocator_, img.image, img.allocation);
 }
 
 void JVKEngine::updateScene() {
@@ -1029,7 +1027,7 @@ void JVKEngine::initDrawImages() {
     drawImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
     drawImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    vmaCreateImage(_allocator, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
+    vmaCreateImage(allocator_, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
 
     VkImageViewCreateInfo imageViewInfo = VkInit::imageView(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
     VK_CHECK(vkCreateImageView(context_.device, &imageViewInfo, nullptr, &_drawImage.imageView));
@@ -1042,7 +1040,7 @@ void JVKEngine::initDrawImages() {
     depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
     VkImageCreateInfo depthImageInfo = VkInit::image(_depthImage.imageFormat, depthImageUsages, drawImageExtent);
-    vmaCreateImage(_allocator, &depthImageInfo, &drawImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
+    vmaCreateImage(allocator_, &depthImageInfo, &drawImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
 
     VkImageViewCreateInfo depthImageViewInfo = VkInit::imageView(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
     VK_CHECK(vkCreateImageView(context_.device, &depthImageViewInfo, nullptr, &_depthImage.imageView));

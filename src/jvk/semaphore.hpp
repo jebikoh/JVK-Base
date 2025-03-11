@@ -21,6 +21,17 @@ struct Semaphore {
 
     operator VkSemaphore() const { return semaphore; }
 
+    VkSemaphoreSubmitInfo submitInfo(VkPipelineStageFlags2 stageMask) const {
+        VkSemaphoreSubmitInfo info = {};
+        info.sType                 = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        info.pNext                 = nullptr;
+        info.semaphore             = semaphore;
+        info.stageMask             = stageMask;
+        info.deviceIndex           = 0;
+        info.value                 = 1;
+        return info;
+    }
+
     void destroy() {
         vkDestroySemaphore(device, semaphore, nullptr);
     }

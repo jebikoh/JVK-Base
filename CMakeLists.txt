@@ -29,6 +29,7 @@ add_executable(JVK_Engine src/main.cpp
         src/jvk/commands.cpp
         src/jvk/semaphore.hpp
         src/jvk/fence.hpp
+        src/jvk/queue.hpp
 )
 
 if (JVK_ENABLE_PERF_FLAGS)

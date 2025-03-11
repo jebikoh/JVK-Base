@@ -13,6 +13,7 @@
 #include <jvk/commands.hpp>
 #include <jvk/fence.hpp>
 #include <jvk/semaphore.hpp>
+#include <jvk/queue.hpp>
 
 class JVKEngine;
 
@@ -135,12 +136,10 @@ public:
     FrameData &getCurrentFrame() { return frames_[frameNumber_ % JVK_NUM_FRAMES]; }
 
     // QUEUE
-    VkQueue _graphicsQueue;
-    uint32_t _graphicsQueueFamily;
+    jvk::Queue graphicsQueue_;
 
     // MEMORY MANAGEMENT
-    DeletionQueue _globalDeletionQueue;
-    VmaAllocator _allocator;
+    VmaAllocator allocator_;
 
     // DRAW IMAGES
     AllocatedImage _drawImage;
