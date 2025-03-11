@@ -83,16 +83,16 @@ void JVKEngine::cleanup() {
 
         // Frame data
         for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-            vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
+            vkDestroyCommandPool(_device, _frames[i].cmdPool, nullptr);
 
             // Frame sync
-            vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
-            vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
-            vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
+            vkDestroyFence(_device, _frames[i].renderFence, nullptr);
+            vkDestroySemaphore(_device, _frames[i].renderSemaphore, nullptr);
+            vkDestroySemaphore(_device, _frames[i].swapchainSemaphore, nullptr);
 
-            _frames[i]._deletionQueue.flush();
+            _frames[i].deletionQueue.flush();
 
-            _frames[i]._frameDescriptors.destroyPools(_device);
+            _frames[i].frameDescriptors.destroyPools(_device);
         }
 
         // Textures
@@ -156,21 +156,21 @@ void JVKEngine::cleanup() {
 void JVKEngine::draw() {
     updateScene();
     // Wait and reset render fence
-    VK_CHECK(vkWaitForFences(_device, 1, &getCurrentFrame()._renderFence, true, 1000000000));
-    getCurrentFrame()._frameDescriptors.clearPools(_device);
+    VK_CHECK(vkWaitForFences(_device, 1, &getCurrentFrame().renderFence, true, 1000000000));
+    getCurrentFrame().frameDescriptors.clearPools(_device);
 
-    VK_CHECK(vkResetFences(_device, 1, &getCurrentFrame()._renderFence));
+    VK_CHECK(vkResetFences(_device, 1, &getCurrentFrame().renderFence));
 
     // Request an image from swapchain
     uint32_t swapchainImageIndex;
-    VkResult e = vkAcquireNextImageKHR(_device, _swapchain, 1000000000, getCurrentFrame()._swapchainSemaphore, nullptr, &swapchainImageIndex);
+    VkResult e = vkAcquireNextImageKHR(_device, _swapchain, 1000000000, getCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex);
     if (e == VK_ERROR_OUT_OF_DATE_KHR) {
         _resizeRequested = true;
         return;
     }
 
     // Reset the command buffer
-    VkCommandBuffer cmd = getCurrentFrame()._mainCommandBuffer;
+    VkCommandBuffer cmd = getCurrentFrame().cmdBuffer;
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
     _drawExtent.width  = std::min(_swapchainExtent.width, _drawImage.imageExtent.width) * renderScale;
@@ -226,11 +226,11 @@ void JVKEngine::draw() {
     // srcStageMask set to COLOR_ATTACHMENT_OUTPUT_BIT to wait for color attachment output (waiting for swapchain image)
     // dstStageMask set to ALL_GRAPHICS_BIT to signal that all graphics stages are done
     VkCommandBufferSubmitInfo cmdInfo = VkInit::commandBufferSubmit(cmd);
-    VkSemaphoreSubmitInfo waitInfo    = VkInit::semaphoreSubmit(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, getCurrentFrame()._swapchainSemaphore);
-    VkSemaphoreSubmitInfo signalInfo  = VkInit::semaphoreSubmit(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, getCurrentFrame()._renderSemaphore);
+    VkSemaphoreSubmitInfo waitInfo    = VkInit::semaphoreSubmit(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, getCurrentFrame().swapchainSemaphore);
+    VkSemaphoreSubmitInfo signalInfo  = VkInit::semaphoreSubmit(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, getCurrentFrame().renderSemaphore);
     VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, &signalInfo, &waitInfo);
 
-    VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, getCurrentFrame()._renderFence));
+    VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, getCurrentFrame().renderFence));
 
     // Present
     VkPresentInfoKHR presentInfo   = {};
@@ -238,7 +238,7 @@ void JVKEngine::draw() {
     presentInfo.pNext              = nullptr;
     presentInfo.swapchainCount     = 1;
     presentInfo.pSwapchains        = &_swapchain;
-    presentInfo.pWaitSemaphores    = &getCurrentFrame()._renderSemaphore;
+    presentInfo.pWaitSemaphores    = &getCurrentFrame().renderSemaphore;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pImageIndices      = &swapchainImageIndex;
 
@@ -455,11 +455,11 @@ void JVKEngine::initCommands() {
 
     // COMMAND BUFFERS
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-        VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
+        VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i].cmdPool));
 
-        VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBuffer(_frames[i]._commandPool);
+        VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBuffer(_frames[i].cmdPool);
 
-        VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
+        VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i].cmdBuffer));
     }
 
     // IMMEDIATE BUFFERS
@@ -477,10 +477,10 @@ void JVKEngine::initSyncStructures() {
     VkSemaphoreCreateInfo semaphoreCreateInfo = VkInit::semaphore();
 
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-        VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frames[i]._renderFence));
+        VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frames[i].renderFence));
 
-        VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
-        VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
+        VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i].swapchainSemaphore));
+        VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i].renderSemaphore));
     }
 
     // IMMEDIATE SUBMIT FENCE
@@ -559,8 +559,8 @@ void JVKEngine::initDescriptors() {
                 {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
         };
 
-        _frames[i]._frameDescriptors = DynamicDescriptorAllocator();
-        _frames[i]._frameDescriptors.init(_device, 1000, frameSizes);
+        _frames[i].frameDescriptors = DynamicDescriptorAllocator();
+        _frames[i].frameDescriptors.init(_device, 1000, frameSizes);
     }
 
     // GPU SCENE DATA
@@ -766,12 +766,12 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     GPUSceneData *sceneUniformData     = static_cast<GPUSceneData *>(gpuSceneDataBuffer.allocation->GetMappedData());
     *sceneUniformData                  = sceneData;
 
-    VkDescriptorSet globalDescriptor = getCurrentFrame()._frameDescriptors.allocate(_device, _gpuSceneDataDescriptorLayout);
+    VkDescriptorSet globalDescriptor = getCurrentFrame().frameDescriptors.allocate(_device, _gpuSceneDataDescriptorLayout);
     DescriptorWriter writer;
     writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     writer.updateSet(_device, globalDescriptor);
 
-    getCurrentFrame()._deletionQueue.push([=, this]() {
+    getCurrentFrame().deletionQueue.push([=, this]() {
         destroyBuffer(gpuSceneDataBuffer);
     });
 

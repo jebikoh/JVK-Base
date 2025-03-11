@@ -95,8 +95,8 @@ struct DeletionQueue {
 
 struct FrameData {
     // FRAME COMMANDS
-    VkCommandPool _commandPool;
-    VkCommandBuffer _mainCommandBuffer;
+    VkCommandPool cmdPool;
+    VkCommandBuffer cmdBuffer;
 
     // FRAME SYNC
     // Semaphores:
@@ -104,12 +104,12 @@ struct FrameData {
     //  2. Control presentation of rendered image to OS after draw
     // Fences:
     //  1. Wait for draw commands of a submitted cmd buffer to be finished
-    VkSemaphore _swapchainSemaphore;
-    VkSemaphore _renderSemaphore;
-    VkFence _renderFence;
+    VkSemaphore swapchainSemaphore;
+    VkSemaphore renderSemaphore;
+    VkFence renderFence;
 
-    DeletionQueue _deletionQueue;
-    DynamicDescriptorAllocator _frameDescriptors;
+    DeletionQueue deletionQueue;
+    DynamicDescriptorAllocator frameDescriptors;
 };
 
 constexpr unsigned int JVK_NUM_FRAMES = 2;
