@@ -42,7 +42,8 @@ add_subdirectory(include/vma)
 add_subdirectory(include/sdl EXCLUDE_FROM_ALL)
 
 # GLM
-add_library(glm INTERFACE)
+add_library(glm INTERFACE
+        src/vk/context.hpp)
 target_include_directories(glm INTERFACE include/glm)
 
 # ImGUI

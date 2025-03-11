@@ -7,6 +7,7 @@
 #include <vk_descriptors.hpp>
 #include <vk_types.hpp>
 #include <camera.hpp>
+#include <vk/context.hpp>
 
 class JVKEngine;
 
@@ -122,11 +123,7 @@ public:
     VkExtent2D _windowExtent{1700, 900};
 
     // VULKAN INSTANCE
-    VkInstance _instance;
-    VkDebugUtilsMessengerEXT _debugMessenger;
-    VkPhysicalDevice _physDevice;
-    VkDevice _device;
-    VkSurfaceKHR _surface;
+    jvk::Context context_;
 
     // SWAPCHAIN
     VkSwapchainKHR _swapchain;
