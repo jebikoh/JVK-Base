@@ -62,12 +62,12 @@ void JVKEngine::init() {
     // CAMERA
     _mainCamera.velocity = glm::vec3(0.0f);
     _mainCamera.position = glm::vec3(30.f, -00.f, -085.f);
-    _mainCamera.pitch = 0.0f;
-    _mainCamera.yaw = 0.0f;
+    _mainCamera.pitch    = 0.0f;
+    _mainCamera.yaw      = 0.0f;
 
     // SCENE
-    std::string scenePath = "../assets/DamagedHelmet.glb";
-    auto sceneFile = loadGLTF(this, scenePath);
+    std::string scenePath = "../assets/sponza.glb";
+    auto sceneFile        = loadGLTF(this, scenePath);
     assert(sceneFile.has_value());
     loadedScenes["base_scene"] = *sceneFile;
 
@@ -256,7 +256,7 @@ void JVKEngine::run() {
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) bQuit = true;
 
-            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && !ImGui::GetIO().WantCaptureMouse) {
                 SDL_SetRelativeMouseMode(SDL_TRUE);
             }
 
@@ -273,7 +273,9 @@ void JVKEngine::run() {
                 }
             }
 
-            _mainCamera.processSDLEvent(e);
+            if (SDL_GetRelativeMouseMode() == SDL_TRUE && !ImGui::GetIO().WantCaptureMouse) {
+                _mainCamera.processSDLEvent(e);
+            }
             ImGui_ImplSDL2_ProcessEvent(&e);
         }
 
@@ -300,6 +302,11 @@ void JVKEngine::run() {
         ImGui::Text("Draws %i", _stats.drawCallCount);
         ImGui::End();
 
+        if (ImGui::Begin("Camera")) {
+            ImGui::SliderFloat("Speed", &_mainCamera.speed, 0.0f, 1000.0f);
+        }
+        ImGui::End();
+
         if (ImGui::Begin("computeEffects")) {
 
             ImGui::SliderFloat("Render Scale", &renderScale, 0.3f, 1.0f);
@@ -321,9 +328,10 @@ void JVKEngine::run() {
 
         draw();
 
-        auto end = std::chrono::system_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end-start);
+        auto end         = std::chrono::system_clock::now();
+        auto elapsed     = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         _stats.frameTime = elapsed.count() / 1000.0f;
+        deltaTime_       = _stats.frameTime / 1000.0f;
     }
 }
 
@@ -377,12 +385,12 @@ void JVKEngine::initVulkan() {
 
     // DEVICE
     vkb::DeviceBuilder deviceBuilder{vkbPhysicalDevice};
-    vkb::Device vkbDevice = deviceBuilder.build().value();
-    context_.device               = vkbDevice.device;
-    context_.physicalDevice           = vkbPhysicalDevice.physical_device;
+    vkb::Device vkbDevice   = deviceBuilder.build().value();
+    context_.device         = vkbDevice.device;
+    context_.physicalDevice = vkbPhysicalDevice.physical_device;
 
     // QUEUE
-    graphicsQueue_.queue       = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+    graphicsQueue_.queue  = vkbDevice.get_queue(vkb::QueueType::graphics).value();
     graphicsQueue_.family = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 
     // VMA
@@ -404,7 +412,7 @@ void JVKEngine::initSwapchain() {
 void JVKEngine::initCommands() {
     // COMMAND POOL
     // Indicate that buffers should be individually resettable
-    VkCommandPoolCreateFlags flags          = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
     // COMMAND BUFFERS
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
@@ -440,10 +448,9 @@ void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
 void JVKEngine::initDescriptors() {
     // GLOBAL DESCRIPTOR ALLOCATOR
     std::vector<DynamicDescriptorAllocator::PoolSizeRatio> sizes =
-    {
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 }
-    };
+            {
+                    {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+                    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}};
 
     _globalDescriptorAllocator.init(context_.device, 10, sizes);
 
@@ -646,7 +653,7 @@ void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) cons
 void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     _stats.drawCallCount = 0;
     _stats.triangleCount = 0;
-    auto start= std::chrono::system_clock::now();
+    auto start           = std::chrono::system_clock::now();
 
     // SORT DRAWS
     std::vector<uint32_t> opaqueDraws;
@@ -656,13 +663,13 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     }
 
     std::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const auto &iA, const auto &iB) {
-       const RenderObject &A = _mainDrawContext.opaqueSurfaces[iA];
-       const RenderObject &B = _mainDrawContext.opaqueSurfaces[iB];
+        const RenderObject &A = _mainDrawContext.opaqueSurfaces[iA];
+        const RenderObject &B = _mainDrawContext.opaqueSurfaces[iB];
 
-       if (A.material == B.material) {
-           return A.indexBuffer < B.indexBuffer;
-       }
-       return A.material < B.material;
+        if (A.material == B.material) {
+            return A.indexBuffer < B.indexBuffer;
+        }
+        return A.material < B.material;
     });
 
     // SETUP RENDER PASS
@@ -690,7 +697,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
     MaterialPipeline *lastPipeline = nullptr;
     MaterialInstance *lastMaterial = nullptr;
-    VkBuffer lastIndexBuffer = VK_NULL_HANDLE;
+    VkBuffer lastIndexBuffer       = VK_NULL_HANDLE;
 
     auto draw = [&](const RenderObject &r) {
         if (r.material != lastMaterial) {
@@ -722,7 +729,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
             }
 
             // Bind material descriptor set
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 1, 1, &r.material->materialSet,0, nullptr);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 1, 1, &r.material->materialSet, 0, nullptr);
         }
 
         // Bind index buffer
@@ -734,7 +741,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
         // Push constants
         GPUDrawPushConstants pushConstants;
         pushConstants.vertexBuffer = r.vertexBufferAddress;
-        pushConstants.worldMatrix = r.transform;
+        pushConstants.worldMatrix  = r.transform;
         vkCmdPushConstants(cmd, r.material->pipeline->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
         // Draw
@@ -744,18 +751,18 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
         _stats.triangleCount += r.indexCount / 3;
     };
 
-    for (const auto &r : opaqueDraws) {
+    for (const auto &r: opaqueDraws) {
         draw(_mainDrawContext.opaqueSurfaces[r]);
     }
 
-    for (const RenderObject &r : _mainDrawContext.transparentSurfaces) {
+    for (const RenderObject &r: _mainDrawContext.transparentSurfaces) {
         draw(r);
     }
 
     vkCmdEndRendering(cmd);
 
-    auto end = std::chrono::system_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    auto end            = std::chrono::system_clock::now();
+    auto elapsed        = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     _stats.meshDrawTime = elapsed.count() / 1000.0f;
 }
 
@@ -868,15 +875,15 @@ void JVKEngine::initDefaultData() {
     matResources.metallicRoughnessImage   = _whiteImage;
     matResources.metallicRoughnessSampler = _defaultSamplerLinear;
 
-    _matConstants = createBuffer(sizeof(GLTFMetallicRoughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    _matConstants                                              = createBuffer(sizeof(GLTFMetallicRoughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     GLTFMetallicRoughness::MaterialConstants *sceneUniformData = static_cast<GLTFMetallicRoughness::MaterialConstants *>(_matConstants.allocation->GetMappedData());
-    sceneUniformData->colorFactors = glm::vec4{1, 1, 1, 1};
-    sceneUniformData->metallicRoughnessFactors = glm::vec4{1, 0.5, 0, 0};
+    sceneUniformData->colorFactors                             = glm::vec4{1, 1, 1, 1};
+    sceneUniformData->metallicRoughnessFactors                 = glm::vec4{1, 0.5, 0, 0};
 
-    matResources.dataBuffer = _matConstants.buffer;
+    matResources.dataBuffer       = _matConstants.buffer;
     matResources.dataBufferOffset = 0;
 
-    _defaultMaterialData = _metallicRoughnessMaterial.writeMaterial(context_.device, MaterialPass::MAIN_COLOR, matResources,  _globalDescriptorAllocator);
+    _defaultMaterialData = _metallicRoughnessMaterial.writeMaterial(context_.device, MaterialPass::MAIN_COLOR, matResources, _globalDescriptorAllocator);
 }
 
 void JVKEngine::resizeSwapchain() {
@@ -892,7 +899,7 @@ void JVKEngine::resizeSwapchain() {
     _resizeRequested = false;
 }
 
-AllocatedImage  JVKEngine::createImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped, const VkSampleCountFlagBits sampleCount) const {
+AllocatedImage JVKEngine::createImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped, const VkSampleCountFlagBits sampleCount) const {
     // IMAGE
     AllocatedImage image;
     image.imageFormat           = format;
@@ -969,7 +976,7 @@ void JVKEngine::destroyImage(const AllocatedImage &img) const {
 void JVKEngine::updateScene() {
     auto start = std::chrono::system_clock::now();
 
-    _mainCamera.update();
+    _mainCamera.update(deltaTime_);
     glm::mat4 view = _mainCamera.getViewMatrix();
     glm::mat4 proj = glm::perspective(glm::radians(70.f), static_cast<float>(windowExtent_.width) / static_cast<float>(windowExtent_.height), 0.1f, 10000.0f);
     proj[1][1] *= -1;
@@ -978,15 +985,15 @@ void JVKEngine::updateScene() {
     _mainDrawContext.transparentSurfaces.clear();
     loadedScenes["base_scene"]->draw(glm::mat4(1.0f), _mainDrawContext);
 
-    sceneData.view = view;
-    sceneData.proj = proj;
-    sceneData.viewProj = sceneData.proj * sceneData.view;
-    sceneData.ambientColor = glm::vec4(0.1f);
-    sceneData.sunlightColor = glm::vec4(1.0f);
-    sceneData.sunlightDirection = glm::vec4(0,1,0.5,1.0f);
+    sceneData.view              = view;
+    sceneData.proj              = proj;
+    sceneData.viewProj          = sceneData.proj * sceneData.view;
+    sceneData.ambientColor      = glm::vec4(0.1f);
+    sceneData.sunlightColor     = glm::vec4(1.0f);
+    sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.0f);
 
-    auto end = std::chrono::system_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    auto end               = std::chrono::system_clock::now();
+    auto elapsed           = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     _stats.sceneUpdateTime = elapsed.count() / 1000.0f;
 }
 
@@ -1049,14 +1056,14 @@ void JVKEngine::initDrawImages() {
 void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {
     glm::mat4 nodeMatrix = topMatrix * worldTransform;
 
-    for (auto & s : mesh->surfaces) {
+    for (auto &s: mesh->surfaces) {
         RenderObject rObj;
-        rObj.indexCount = s.count;
-        rObj.firstIndex = s.startIndex;
+        rObj.indexCount  = s.count;
+        rObj.firstIndex  = s.startIndex;
         rObj.indexBuffer = mesh->meshBuffers.indexBuffer.buffer;
-        rObj.material = &s.material->data;
+        rObj.material    = &s.material->data;
 
-        rObj.transform = nodeMatrix;
+        rObj.transform           = nodeMatrix;
         rObj.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
 
         if (rObj.material->passType == MaterialPass::TRANSPARENT) {

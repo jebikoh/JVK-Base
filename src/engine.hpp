@@ -128,6 +128,8 @@ public:
     bool stopRendering_ = false;
     VkExtent2D windowExtent_{1700, 900};
 
+    float deltaTime_     = 1;
+
     jvk::Context context_;
     jvk::Swapchain swapchain_;
 
