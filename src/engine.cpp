@@ -164,15 +164,14 @@ void JVKEngine::draw() {
     }
 
     // Reset the command buffer
-    VkCommandBuffer cmd = getCurrentFrame().cmdBuffer;
-    VK_CHECK(vkResetCommandBuffer(cmd, 0));
+    auto cmd = getCurrentFrame().cmdBuffer;
+    VK_CHECK(cmd.reset());
 
     _drawExtent.width  = std::min(swapchain_.extent.width, _drawImage.imageExtent.width) * renderScale;
     _drawExtent.height = std::min(swapchain_.extent.height, _drawImage.imageExtent.height) * renderScale;
 
     // Start the command buffer
-    VkCommandBufferBeginInfo cmdBeginInfo = VkInit::commandBufferBegin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-    VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+    VK_CHECK(cmd.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT));
 
     // Transition draw image to general
     VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -214,12 +213,12 @@ void JVKEngine::draw() {
     VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     // End command buffer
-    VK_CHECK(vkEndCommandBuffer(cmd));
+    VK_CHECK(cmd.end());
 
     // Submit buffer
     // srcStageMask set to COLOR_ATTACHMENT_OUTPUT_BIT to wait for color attachment output (waiting for swapchain image)
     // dstStageMask set to ALL_GRAPHICS_BIT to signal that all graphics stages are done
-    VkCommandBufferSubmitInfo cmdInfo = VkInit::commandBufferSubmit(cmd);
+    VkCommandBufferSubmitInfo cmdInfo = cmd.submitInfo();
     VkSemaphoreSubmitInfo waitInfo    = getCurrentFrame().swapchainSemaphore.submitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     VkSemaphoreSubmitInfo signalInfo  = getCurrentFrame().renderSemaphore.submitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
     VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, &signalInfo, &waitInfo);

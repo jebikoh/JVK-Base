@@ -8,7 +8,7 @@
 struct ImmediateBuffer {
     jvk::Fence fence;
     jvk::CommandPool pool;
-    VkCommandBuffer cmd;
+    jvk::CommandBuffer cmd;
 
     ImmediateBuffer() {};
 
@@ -29,20 +29,19 @@ struct ImmediateBuffer {
     void submit(VkQueue queue, std::function<void(VkCommandBuffer cmd)> &&function) const {
         // Reset fence & buffer
         VK_CHECK(fence.reset());
-        VK_CHECK(vkResetCommandBuffer(cmd, 0));
+        VK_CHECK(cmd.reset());
 
         // Create and start buffer
-        VkCommandBufferBeginInfo cmdBegin = VkInit::commandBufferBegin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-        VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBegin));
+        VK_CHECK(cmd.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT));
 
         // Record immediate submit commands
         function(cmd);
 
         // End buffer
-        VK_CHECK(vkEndCommandBuffer(cmd));
+        VK_CHECK(cmd.end());
 
         // Submit and wait for fence
-        VkCommandBufferSubmitInfo cmdInfo = VkInit::commandBufferSubmit(cmd);
+        VkCommandBufferSubmitInfo cmdInfo = cmd.submitInfo();
         VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, nullptr, nullptr);
         VK_CHECK(vkQueueSubmit2(queue, 1, &submit, fence));
         fence.wait();

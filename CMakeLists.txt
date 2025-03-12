@@ -26,7 +26,6 @@ add_executable(JVK_Engine src/main.cpp
         src/jvk/commands.hpp
         src/jvk/context.hpp
         src/jvk/swapchain.hpp
-        src/jvk/commands.cpp
         src/jvk/semaphore.hpp
         src/jvk/fence.hpp
         src/jvk/queue.hpp

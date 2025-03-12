@@ -90,7 +90,7 @@ struct ComputeEffect {
 struct FrameData {
     // FRAME COMMANDS
     jvk::CommandPool cmdPool;
-    VkCommandBuffer cmdBuffer;
+    jvk::CommandBuffer cmdBuffer;
 
     // FRAME SYNC
     // Semaphores:
