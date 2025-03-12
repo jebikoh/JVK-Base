@@ -4,7 +4,7 @@
 #include <fastgltf/glm_element_traits.hpp>
 #include <fastgltf/tools.hpp>
 #include <iostream>
-#include <loader.hpp>
+#include <mesh.hpp>
 #include <ranges>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -16,8 +16,8 @@
 constexpr bool JVK_OVERRIDE_COLORS_WITH_NORMAL_MAP = false;
 constexpr bool JVK_LOADER_GENERATE_MIPMAPS = true;
 
-std::optional<AllocatedImage> loadImage(JVKEngine *engine, fastgltf::Asset &asset, fastgltf::Image &image) {
-    AllocatedImage newImage{};
+std::optional<jvk::Image> loadImage(JVKEngine *engine, fastgltf::Asset &asset, fastgltf::Image &image) {
+    jvk::Image newImage{};
 
     // TOP 10 C++ FEATURES I HATE
     std::visit(fastgltf::visitor {
@@ -127,8 +127,8 @@ void LoadedGLTF::destroy() {
     }
 
     for (auto &[k, v]: images) {
-        if (v.image == engine->_errorCheckerboardImage.image) continue;
-        engine->destroyImage(v);
+        if (v.image == engine->errorCheckerboardImage_.image) continue;
+        v.destroy(device, engine->allocator_);
     }
 
     for (const auto &sampler: samplers) {
@@ -204,13 +204,13 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
     // SETUP TEMPORARY ARRAYS
     std::vector<std::shared_ptr<MeshAsset>> meshes;
     std::vector<std::shared_ptr<Node>> nodes;
-    std::vector<AllocatedImage> images;
+    std::vector<jvk::Image> images;
     std::vector<std::shared_ptr<GLTFMaterial>> materials;
 
     // LOAD TEXTURES
     int textureIndex = 0;
     for (fastgltf::Image &image: gltf.images) {
-        std::optional<AllocatedImage> img = loadImage(engine, gltf, image);
+        std::optional<jvk::Image> img = loadImage(engine, gltf, image);
         std::string imgName;
         if (image.name.empty()) {
             imgName = "texture_" + std::to_string(textureIndex);
@@ -223,7 +223,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
             file.images[imgName] = *img;
             fmt::print("Texture image loaded: {}\n", imgName);
         } else {
-            images.push_back(engine->_errorCheckerboardImage);
+            images.push_back(engine->errorCheckerboardImage_);
             fmt::print("GLTF failed to load texture: {}\n", imgName);
         }
         textureIndex++;
@@ -257,9 +257,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
         // MATERIAL RESOURCES
         GLTFMetallicRoughness::MaterialResources matResources;
         // Default textures & samplers
-        matResources.colorImage               = engine->_whiteImage;
+        matResources.colorImage               = engine->whiteImage_;
         matResources.colorSampler             = engine->_defaultSamplerLinear;
-        matResources.metallicRoughnessImage   = engine->_whiteImage;
+        matResources.metallicRoughnessImage   = engine->whiteImage_;
         matResources.metallicRoughnessSampler = engine->_defaultSamplerLinear;
 
         // Uniform Buffer

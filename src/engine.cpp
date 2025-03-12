@@ -12,7 +12,7 @@
 #include <thread>
 
 #define VMA_IMPLEMENTATION
-#include "loader.hpp"
+#include "mesh.hpp"
 
 #include <vk_mem_alloc.h>
 
@@ -98,10 +98,10 @@ void JVKEngine::cleanup() {
         // Textures
         vkDestroySampler(context_.device, _defaultSamplerLinear, nullptr);
         vkDestroySampler(context_.device, _defaultSamplerNearest, nullptr);
-        destroyImage(_errorCheckerboardImage);
-        destroyImage(_blackImage);
-        destroyImage(_greyImage);
-        destroyImage(_whiteImage);
+
+        errorCheckerboardImage_.destroy(context_, allocator_);
+        blackImage_.destroy(context_, allocator_);
+        whiteImage_.destroy(context_, allocator_);
 
         // Default data
         _metallicRoughnessMaterial.clearResources(context_.device);
@@ -126,12 +126,10 @@ void JVKEngine::cleanup() {
         vkDestroyDescriptorSetLayout(context_.device, _singleImageDescriptorLayout, nullptr);
 
         // Depth image
-        vkDestroyImageView(context_.device, _depthImage.imageView, nullptr);
-        vmaDestroyImage(allocator_, _depthImage.image, _depthImage.allocation);
+        _depthImage.destroy(context_, allocator_);
 
         // Draw image
-        vkDestroyImageView(context_.device, _drawImage.imageView, nullptr);
-        vmaDestroyImage(allocator_, _drawImage.image, _drawImage.allocation);
+        _drawImage.destroy(context_, allocator_);
 
         // VMA
         vmaDestroyAllocator(allocator_);
@@ -809,13 +807,10 @@ void JVKEngine::initDefaultData() {
     // TEXTURES
     // 1 pixel default textures
     uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
-    _whiteImage    = createImage((void *) &white, VkExtent3D{1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-
-    uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 1));
-    _greyImage    = createImage((void *) &grey, VkExtent3D{1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    whiteImage_    = createImage((void *) &white, VkExtent3D{1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     uint32_t black = glm::packUnorm4x8(glm::vec4(0, 0, 0, 1.0f));
-    _blackImage    = createImage((void *) &black, VkExtent3D{1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    blackImage_    = createImage((void *) &black, VkExtent3D{1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     //checkerboard image
     uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
@@ -825,7 +820,7 @@ void JVKEngine::initDefaultData() {
             pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : black;
         }
     }
-    _errorCheckerboardImage = createImage(pixels.data(), VkExtent3D{16, 16, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    errorCheckerboardImage_ = createImage(pixels.data(), VkExtent3D{16, 16, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     // SAMPLERS
     VkSamplerCreateInfo sampler{};
@@ -840,9 +835,9 @@ void JVKEngine::initDefaultData() {
 
     // MATERIALS
     GLTFMetallicRoughness::MaterialResources matResources;
-    matResources.colorImage               = _whiteImage;
+    matResources.colorImage               = whiteImage_;
     matResources.colorSampler             = _defaultSamplerLinear;
-    matResources.metallicRoughnessImage   = _whiteImage;
+    matResources.metallicRoughnessImage   = whiteImage_;
     matResources.metallicRoughnessSampler = _defaultSamplerLinear;
 
     _matConstants                                              = createBuffer(sizeof(GLTFMetallicRoughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -869,9 +864,9 @@ void JVKEngine::resizeSwapchain() {
     _resizeRequested = false;
 }
 
-AllocatedImage JVKEngine::createImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped, const VkSampleCountFlagBits sampleCount) const {
+jvk::Image JVKEngine::createImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped, const VkSampleCountFlagBits sampleCount) const {
     // IMAGE
-    AllocatedImage image;
+    jvk::Image image;
     image.imageFormat           = format;
     image.imageExtent           = size;
     VkImageCreateInfo imageInfo = VkInit::image(format, usage, size, sampleCount);
@@ -899,7 +894,7 @@ AllocatedImage JVKEngine::createImage(const VkExtent3D size, const VkFormat form
     return image;
 }
 
-AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) const {
+jvk::Image JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) const {
     // STAGING BUFFER
     size_t dataSize              = size.depth * size.width * size.height * 4;
     AllocatedBuffer uploadBuffer = createBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -911,7 +906,7 @@ AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat form
         imgUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     }
 
-    AllocatedImage image = createImage(size, format, imgUsages, mipmapped);
+    jvk::Image image = createImage(size, format, imgUsages, mipmapped);
     immBuffer_.submit(graphicsQueue_.queue, [&](VkCommandBuffer cmd) {
         VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
@@ -937,10 +932,6 @@ AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat form
 
     destroyBuffer(uploadBuffer);
     return image;
-}
-void JVKEngine::destroyImage(const AllocatedImage &img) const {
-    vkDestroyImageView(context_.device, img.imageView, nullptr);
-    vmaDestroyImage(allocator_, img.image, img.allocation);
 }
 
 void JVKEngine::updateScene() {

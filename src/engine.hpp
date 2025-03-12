@@ -1,7 +1,7 @@
 #pragma once
 
 #include <immediate.hpp>
-#include <loader.hpp>
+#include <mesh.hpp>
 
 #include <camera.hpp>
 #include <deletion_stack.hpp>
@@ -16,6 +16,7 @@
 #include <jvk/fence.hpp>
 #include <jvk/semaphore.hpp>
 #include <jvk/queue.hpp>
+#include <jvk/image.hpp>
 
 class JVKEngine;
 
@@ -54,10 +55,10 @@ struct GLTFMetallicRoughness {
     };
 
     struct MaterialResources {
-        AllocatedImage colorImage;
+        jvk::Image colorImage;
         VkSampler colorSampler;
 
-        AllocatedImage metallicRoughnessImage;
+        jvk::Image metallicRoughnessImage;
         VkSampler metallicRoughnessSampler;
 
         VkBuffer dataBuffer;
@@ -131,8 +132,8 @@ public:
     VmaAllocator allocator_;
 
     // DRAW IMAGES
-    AllocatedImage _drawImage;
-    AllocatedImage _depthImage;
+    jvk::Image _drawImage;
+    jvk::Image _depthImage;
     VkExtent2D _drawExtent;
     float renderScale = 1.0f;
 
@@ -158,10 +159,9 @@ public:
     VkDescriptorSetLayout _gpuSceneDataDescriptorLayout;
 
     // TEXTURES
-    AllocatedImage _whiteImage;
-    AllocatedImage _blackImage;
-    AllocatedImage _greyImage;
-    AllocatedImage _errorCheckerboardImage;
+    jvk::Image whiteImage_;
+    jvk::Image blackImage_;
+    jvk::Image errorCheckerboardImage_;
 
     VkSampler _defaultSamplerLinear;
     VkSampler _defaultSamplerNearest;
@@ -208,9 +208,8 @@ public:
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 
     // IMAGES
-    AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT) const;
-    AllocatedImage createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
-    void destroyImage(const AllocatedImage &img) const;
+    jvk::Image createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT) const;
+    jvk::Image createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
 
     // BUFFERS
     AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;

@@ -19,8 +19,8 @@ add_executable(JVK_Engine src/main.cpp
         src/vk_descriptors.cpp
         src/vk_pipelines.cpp
         src/vk_pipelines.hpp
-        src/loader.hpp
-        src/loader.cpp
+        src/mesh.hpp
+        src/mesh.cpp
         src/camera.hpp
         src/camera.cpp
         src/jvk/commands.hpp
@@ -31,6 +31,7 @@ add_executable(JVK_Engine src/main.cpp
         src/jvk/queue.hpp
         src/deletion_stack.hpp
         src/immediate.hpp
+        src/jvk/image.hpp
 )
 
 if (JVK_ENABLE_PERF_FLAGS)

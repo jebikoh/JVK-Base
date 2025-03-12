@@ -6,6 +6,10 @@
 #include <filesystem>
 #include <jvk.hpp>
 
+namespace jvk {
+struct Image;
+}
+
 struct GLTFMaterial {
     MaterialInstance data;
 };
@@ -28,7 +32,7 @@ class JVKEngine;
 struct LoadedGLTF : public IRenderable {
     std::unordered_map<std::string, std::shared_ptr<MeshAsset>> meshes;
     std::unordered_map<std::string, std::shared_ptr<Node>> nodes;
-    std::unordered_map<std::string, AllocatedImage> images;
+    std::unordered_map<std::string, jvk::Image> images;
     std::unordered_map<std::string, std::shared_ptr<GLTFMaterial>> materials;
 
     std::vector<std::shared_ptr<Node>> topNodes;
