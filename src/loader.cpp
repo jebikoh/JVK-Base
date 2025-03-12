@@ -4,8 +4,8 @@
 #include <fastgltf/glm_element_traits.hpp>
 #include <fastgltf/tools.hpp>
 #include <iostream>
+#include <loader.hpp>
 #include <ranges>
-#include <vk_loader.hpp>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>

@@ -1,12 +1,14 @@
 #pragma once
 
-#include "vk_loader.hpp"
+#include <immediate.hpp>
+#include <loader.hpp>
 
+#include <camera.hpp>
+#include <deletion_stack.hpp>
 #include <jvk.hpp>
 #include <stack>
 #include <vk_descriptors.hpp>
 #include <vk_types.hpp>
-#include <camera.hpp>
 
 #include <jvk/context.hpp>
 #include <jvk/swapchain.hpp>
@@ -85,21 +87,6 @@ struct ComputeEffect {
     ComputePushConstants data;
 };
 
-struct DeletionQueue {
-    std::stack<std::function<void()>> deletors;
-
-    void push(std::function<void()> &&function) {
-        deletors.push(function);
-    }
-
-    void flush() {
-        while (!deletors.empty()) {
-            deletors.top()();
-            deletors.pop();
-        }
-    }
-};
-
 struct FrameData {
     // FRAME COMMANDS
     jvk::CommandPool cmdPool;
@@ -161,9 +148,7 @@ public:
     VkPipelineLayout _gradientPipelineLayout;
 
     // IMMEDIATE COMMANDS
-    jvk::Fence _immFence;
-    jvk::CommandPool _immCommandPool;
-    VkCommandBuffer _immCommandBuffer;
+    ImmediateBuffer immBuffer_;
 
     // IMGUI
     VkDescriptorPool _imguiPool;
@@ -220,7 +205,6 @@ public:
 
     void run();
 
-    void immediateSubmit(std::function<void(VkCommandBuffer cmd)> && function) const;
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 
     // IMAGES

@@ -1,3 +1,4 @@
+#pragma once
 #include <jvk/commands.hpp>
 
 VkResult jvk::CommandPool::init(VkDevice device_, uint32_t familyIndex_, VkCommandPoolCreateFlags flags) {

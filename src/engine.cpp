@@ -12,7 +12,7 @@
 #include <thread>
 
 #define VMA_IMPLEMENTATION
-#include "vk_loader.hpp"
+#include "loader.hpp"
 
 #include <vk_mem_alloc.h>
 
@@ -112,8 +112,7 @@ void JVKEngine::cleanup() {
         vkDestroyDescriptorPool(context_.device, _imguiPool, nullptr);
 
         // Immediate command pool
-        _immCommandPool.destroy();
-        _immFence.destroy();
+        immBuffer_.destroy();
 
         // PIPELINES
         vkDestroyPipelineLayout(context_.device, _gradientPipelineLayout, nullptr);
@@ -421,9 +420,7 @@ void JVKEngine::initCommands() {
     }
 
     // IMMEDIATE BUFFERS
-    VK_CHECK(_immCommandPool.init(context_, graphicsQueue_.family, flags));
-    VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBuffer(_immCommandPool, 1);
-    VK_CHECK(vkAllocateCommandBuffers(context_.device, &cmdAllocInfo, &_immCommandBuffer));
+    VK_CHECK(immBuffer_.init(context_, graphicsQueue_.family, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 }
 
 void JVKEngine::initSyncStructures() {
@@ -432,7 +429,6 @@ void JVKEngine::initSyncStructures() {
         VK_CHECK(frames_[i].swapchainSemaphore.init(context_));
         VK_CHECK(frames_[i].renderSemaphore.init(context_));
     }
-    VK_CHECK(_immFence.init(context_, VK_FENCE_CREATE_SIGNALED_BIT));
 }
 
 void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
@@ -569,29 +565,6 @@ void JVKEngine::initBackgroundPipelines() {
 
     vkDestroyShaderModule(context_.device, gradientShader, nullptr);
     vkDestroyShaderModule(context_.device, skyShader, nullptr);
-}
-
-void JVKEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)> &&function) const {
-    // Reset fence & buffer
-    VK_CHECK(_immFence.reset());
-    VK_CHECK(vkResetCommandBuffer(_immCommandBuffer, 0));
-
-    // Create and start buffer
-    VkCommandBuffer cmd               = _immCommandBuffer;
-    VkCommandBufferBeginInfo cmdBegin = VkInit::commandBufferBegin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-    VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBegin));
-
-    // Record immediate submit commands
-    function(cmd);
-
-    // End buffer
-    VK_CHECK(vkEndCommandBuffer(cmd));
-
-    // Submit and wait for fence
-    VkCommandBufferSubmitInfo cmdInfo = VkInit::commandBufferSubmit(cmd);
-    VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, nullptr, nullptr);
-    VK_CHECK(vkQueueSubmit2(graphicsQueue_, 1, &submit, _immFence));
-    VK_CHECK(vkWaitForFences(context_.device, 1, &_immFence.fence, true, 9999999999));
 }
 
 void JVKEngine::initImgui() {
@@ -814,7 +787,7 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
     memcpy(static_cast<char *>(data) + vertexBufferSize, indices.data(), indexBufferSize);
 
     // COPY TO GPU BUFFER
-    immediateSubmit([&](VkCommandBuffer cmd) {
+    immBuffer_.submit(graphicsQueue_, [&](VkCommandBuffer cmd) {
         // COPY VERTEX DATA
         VkBufferCopy vertexCopy{0};
         vertexCopy.dstOffset = 0;
@@ -942,7 +915,7 @@ AllocatedImage JVKEngine::createImage(void *data, VkExtent3D size, VkFormat form
     }
 
     AllocatedImage image = createImage(size, format, imgUsages, mipmapped);
-    immediateSubmit([&](VkCommandBuffer cmd) {
+    immBuffer_.submit(graphicsQueue_.queue, [&](VkCommandBuffer cmd) {
         VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
         VkBufferImageCopy copyRegion{};
