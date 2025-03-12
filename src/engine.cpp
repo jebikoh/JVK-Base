@@ -221,9 +221,7 @@ void JVKEngine::draw() {
     VkCommandBufferSubmitInfo cmdInfo = cmd.submitInfo();
     VkSemaphoreSubmitInfo waitInfo    = getCurrentFrame().swapchainSemaphore.submitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     VkSemaphoreSubmitInfo signalInfo  = getCurrentFrame().renderSemaphore.submitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
-    VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, &signalInfo, &waitInfo);
-
-    VK_CHECK(vkQueueSubmit2(graphicsQueue_, 1, &submit, getCurrentFrame().renderFence));
+    graphicsQueue_.submit(&cmdInfo, &waitInfo, &signalInfo, getCurrentFrame().renderFence);
 
     // Present
     VkPresentInfoKHR presentInfo   = {};
