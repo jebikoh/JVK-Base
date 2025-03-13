@@ -12,7 +12,7 @@ add_executable(JVK_Engine src/main.cpp
         src/engine.hpp
         src/engine.cpp
         src/jvk/init.hpp
-        src/vk_types.hpp
+        src/material.hpp
         src/jvk/descriptor.hpp
         src/jvk/descriptor.cpp
         src/jvk/pipeline.cpp

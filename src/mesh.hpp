@@ -1,6 +1,6 @@
 #pragma once
 #include "fastgltf/types.hpp"
-#include "vk_types.hpp"
+#include "material.hpp"
 
 #include <filesystem>
 #include <jvk.hpp>
@@ -10,8 +10,35 @@ namespace jvk {
 struct Image;
 }
 
-struct GLTFMaterial {
-    MaterialInstance data;
+class JVKEngine;
+
+struct Vertex {
+    glm::vec3 position;
+    float uv_x;
+    glm::vec3 normal;
+    float uv_y;
+    glm::vec4 color;
+};
+
+struct GPUMeshBuffers {
+    jvk::Buffer indexBuffer;
+    jvk::Buffer vertexBuffer;
+    VkDeviceAddress vertexBufferAddress;
+};
+
+struct GPUSceneData {
+    glm::mat4 view;
+    glm::mat4 proj;
+    glm::mat4 viewProj;
+    glm::vec4 ambientColor;
+    glm::vec4 sunlightDirection;
+    glm::vec4 sunlightColor;
+};
+
+// GLOBAL PUSH CONSTANTS/DESCRIPTOR DATA
+struct GPUDrawPushConstants {
+    glm::mat4 worldMatrix;
+    VkDeviceAddress vertexBuffer;
 };
 
 struct GeoSurface {
@@ -27,7 +54,32 @@ struct MeshAsset {
     GPUMeshBuffers meshBuffers;
 };
 
-class JVKEngine;
+struct DrawContext;
+
+class IRenderable {
+    virtual void draw(const glm::mat4 &topMatrix, DrawContext &ctx) = 0;
+};
+
+struct Node : public IRenderable {
+    std::weak_ptr<Node> parent;
+    std::vector<std::shared_ptr<Node>> children;
+
+    glm::mat4 localTransform;
+    glm::mat4 worldTransform;
+
+    void refreshTransform(const glm::mat4 &parentMatrix) {
+        worldTransform = parentMatrix * localTransform;
+        for (const auto &child : children) {
+            child->refreshTransform(worldTransform);
+        }
+    }
+
+    virtual void draw(const glm::mat4 &topMatrix, DrawContext &ctx) override {
+        for (const auto &child : children) {
+            child->draw(topMatrix, ctx);
+        }
+    }
+};
 
 struct LoadedGLTF : public IRenderable {
     std::unordered_map<std::string, std::shared_ptr<MeshAsset>> meshes;

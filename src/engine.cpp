@@ -983,7 +983,7 @@ void JVKEngine::initDrawImages() {
     VkImageCreateInfo drawImageInfo = jvk::init::image(drawImage_.imageFormat, drawImageUsages, drawImageExtent);
 
     // VMA_MEMORY_USAGE_GPU_ONLY: the texture will never be accessed from the CPU
-    // VK_MEMORY_PROPERTYcontext_.device_LOCAL_BIT: GPU exclusive memory flag, guarantees that the memory is on the GPU
+    // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT: GPU exclusive memory flag, guarantees that the memory is on the GPU
     VmaAllocationCreateInfo drawImageAllocInfo = {};
     drawImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
     drawImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);

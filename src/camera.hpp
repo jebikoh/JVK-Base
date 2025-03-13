@@ -1,7 +1,7 @@
 #pragma once
 
-#include <vk_types.hpp>
 #include <SDL_events.h>
+#include <material.hpp>
 
 struct Camera {
     glm::vec3 velocity;

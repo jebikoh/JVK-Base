@@ -6,8 +6,8 @@
 #include <camera.hpp>
 #include <deletion_stack.hpp>
 #include <jvk.hpp>
+#include <material.hpp>
 #include <stack>
-#include <vk_types.hpp>
 
 #include <jvk/commands.hpp>
 #include <jvk/context.hpp>
