@@ -1,13 +1,12 @@
 #pragma once
 
-#include <immediate.hpp>
-#include <mesh.hpp>
-
 #include <camera.hpp>
-#include <deletion_stack.hpp>
-#include <jvk.hpp>
 #include <material.hpp>
 #include <stack>
+
+#include <jvk.hpp>
+#include <immediate.hpp>
+#include <mesh.hpp>
 
 #include <jvk/commands.hpp>
 #include <jvk/context.hpp>
@@ -20,62 +19,6 @@
 #include <jvk/sampler.hpp>
 #include <jvk/buffer.hpp>
 
-class JVKEngine;
-
-struct RenderObject {
-    uint32_t indexCount;
-    uint32_t firstIndex;
-    VkBuffer indexBuffer;
-
-    MaterialInstance *material;
-
-    glm::mat4 transform;
-    VkDeviceAddress vertexBufferAddress;
-};
-
-struct DrawContext {
-    std::vector<RenderObject> opaqueSurfaces;
-    std::vector<RenderObject> transparentSurfaces;
-};
-
-struct MeshNode : public Node {
-    std::shared_ptr<MeshAsset> mesh;
-
-    virtual void draw(const glm::mat4 &topMatrix, DrawContext &ctx) override;
-};
-
-struct GLTFMetallicRoughness {
-    MaterialPipeline opaquePipeline;
-    MaterialPipeline transparentPipeline;
-    VkDescriptorSetLayout materialDescriptorLayout;
-
-    // To be written to UBO
-    struct MaterialConstants {
-        glm::vec4 colorFactors;
-        glm::vec4 metallicRoughnessFactors;
-        glm::vec4 extra[14];
-    };
-
-    struct MaterialResources {
-        jvk::Image colorImage;
-        VkSampler colorSampler;
-
-        jvk::Image metallicRoughnessImage;
-        VkSampler metallicRoughnessSampler;
-
-        VkBuffer dataBuffer;
-        uint32_t dataBufferOffset;
-    };
-
-    jvk::DescriptorWriter writer;
-
-    void buildPipelines(JVKEngine *engine);
-    void clearResources(VkDevice device) const;
-
-    MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources &resources, jvk::DynamicDescriptorAllocator &descriptorAllocator);
-};
-
-struct MeshAsset;
 struct ComputePushConstants {
     glm::vec4 data1;
     glm::vec4 data2;
@@ -109,7 +52,6 @@ struct FrameData {
     jvk::Buffer sceneDataBuffer;
     VkDescriptorSet sceneDataDescriptorSet;
 
-    DeletionStack deletionQueue;
     jvk::DynamicDescriptorAllocator descriptorAllocator;
 };
 
@@ -191,8 +133,8 @@ public:
         float frameTime;
         int triangleCount;
         int drawCallCount;
-        int sceneUpdateTime;
-        int meshDrawTime;
+        float sceneUpdateTime;
+        float meshDrawTime;
     } stats_;
 
     // MSAA

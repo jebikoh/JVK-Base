@@ -54,7 +54,21 @@ struct MeshAsset {
     GPUMeshBuffers meshBuffers;
 };
 
-struct DrawContext;
+struct RenderObject {
+    uint32_t indexCount;
+    uint32_t firstIndex;
+    VkBuffer indexBuffer;
+
+    MaterialInstance *material;
+
+    glm::mat4 transform;
+    VkDeviceAddress vertexBufferAddress;
+};
+
+struct DrawContext {
+    std::vector<RenderObject> opaqueSurfaces;
+    std::vector<RenderObject> transparentSurfaces;
+};
 
 class IRenderable {
     virtual void draw(const glm::mat4 &topMatrix, DrawContext &ctx) = 0;
@@ -79,6 +93,12 @@ struct Node : public IRenderable {
             child->draw(topMatrix, ctx);
         }
     }
+};
+
+struct MeshNode : public Node {
+    std::shared_ptr<MeshAsset> mesh;
+
+    virtual void draw(const glm::mat4 &topMatrix, DrawContext &ctx) override;
 };
 
 struct LoadedGLTF : public IRenderable {

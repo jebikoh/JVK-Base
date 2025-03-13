@@ -27,7 +27,6 @@ add_executable(JVK_Engine src/main.cpp
         src/jvk/semaphore.hpp
         src/jvk/fence.hpp
         src/jvk/queue.hpp
-        src/deletion_stack.hpp
         src/immediate.hpp
         src/jvk/image.hpp
         src/jvk/sampler.hpp

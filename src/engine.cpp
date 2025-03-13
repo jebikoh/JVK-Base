@@ -290,8 +290,8 @@ void JVKEngine::run() {
         ImGui::Begin("Stats");
 
         ImGui::Text("Frame time %f ms", stats_.frameTime);
-        ImGui::Text("Draw time %d ms", stats_.meshDrawTime);
-        ImGui::Text("Update time %d ms", stats_.sceneUpdateTime);
+        ImGui::Text("Draw time %f ms", stats_.meshDrawTime);
+        ImGui::Text("Update time %f ms", stats_.sceneUpdateTime);
         ImGui::Text("Triangles %i", stats_.triangleCount);
         ImGui::Text("Draws %i", stats_.drawCallCount);
         ImGui::End();
