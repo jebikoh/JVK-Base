@@ -1,19 +1,6 @@
 #pragma once
 #include <jvk.hpp>
-
-struct AllocatedImage {
-    VkImage image;
-    VkImageView imageView;
-    VmaAllocation allocation;
-    VkExtent3D imageExtent;
-    VkFormat imageFormat;
-};
-
-struct AllocatedBuffer {
-    VkBuffer buffer;
-    VmaAllocation allocation;
-    VmaAllocationInfo info;
-};
+#include <jvk/buffer.hpp>
 
 struct Vertex {
     glm::vec3 position;
@@ -24,8 +11,8 @@ struct Vertex {
 };
 
 struct GPUMeshBuffers {
-    AllocatedBuffer indexBuffer;
-    AllocatedBuffer vertexBuffer;
+    jvk::Buffer indexBuffer;
+    jvk::Buffer vertexBuffer;
     VkDeviceAddress vertexBufferAddress;
 };
 

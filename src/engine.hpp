@@ -18,6 +18,7 @@
 #include <jvk/swapchain.hpp>
 #include <jvk/descriptor.hpp>
 #include <jvk/sampler.hpp>
+#include <jvk/buffer.hpp>
 
 class JVKEngine;
 
@@ -172,7 +173,7 @@ public:
     // MATERIALS
     GLTFMetallicRoughness metallicRoughnessMaterial_;
     MaterialInstance defaultMaterialData_;
-    AllocatedBuffer matConstants_;
+    jvk::Buffer matConstants_;
 
     // SCENE
     DrawContext drawCtx_;
@@ -211,10 +212,11 @@ public:
     // IMAGES
     jvk::Image createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT) const;
     jvk::Image createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
+    void destroyImage(const jvk::Image &image) const;
 
     // BUFFERS
-    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
-    void destroyBuffer(const AllocatedBuffer &buffer) const;
+    jvk::Buffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
+    void destroyBuffer(const jvk::Buffer &buffer) const;
 
     void updateScene();
 private:

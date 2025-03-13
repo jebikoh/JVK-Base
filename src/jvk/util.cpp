@@ -1,7 +1,7 @@
-#include "jvk/init.hpp"
-#include <vk_util.hpp>
+#include <jvk/init.hpp>
+#include <jvk/util.hpp>
 
-void VkUtil::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
+void jvk::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
     // Creates a pipeline barrier stalls the pipeline until the image is ready
     // 1. All prior writes (srcAccessMask) from any stage (srcStageMask) must happen before the barrier
     // 2. The image layout (oldLayout) is transitioned to the new layout (newLayout)
@@ -42,7 +42,7 @@ void VkUtil::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout o
     vkCmdPipelineBarrier2(cmd, &depInfo);
 }
 
-void VkUtil::copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExtent2D srcSize, VkExtent2D dstSize) {
+void jvk::copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExtent2D srcSize, VkExtent2D dstSize) {
     // Bit-block Transfer: copying data from one location to another
     // This is slower than `vkCmdCopyImage` but is more flexible
     VkImageBlit2 blitRegion {};
@@ -81,7 +81,7 @@ void VkUtil::copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkE
     vkCmdBlitImage2(cmd, &blitInfo);
 }
 
-void VkUtil::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize) {
+void jvk::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize) {
     const int mipLevels = static_cast<int>(std::floor(std::log2(std::max(imageSize.width, imageSize.height)))) + 1;
     for (int mip = 0; mip < mipLevels; ++mip) {
         VkExtent2D halfSize = imageSize;

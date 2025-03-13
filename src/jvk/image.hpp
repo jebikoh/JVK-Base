@@ -13,7 +13,7 @@ struct Image {
     operator VkImage() { return image; }
     operator VkImageView() { return imageView; }
 
-    void destroy(VkDevice device, VmaAllocator allocator) {
+    void destroy(VkDevice device, VmaAllocator allocator) const {
         vkDestroyImageView(device, imageView, nullptr);
         vmaDestroyImage(allocator, image, allocation);
     }

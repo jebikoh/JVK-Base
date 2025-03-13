@@ -1,8 +1,8 @@
+#include "pipeline.hpp"
 #include "jvk/init.hpp"
 #include <fstream>
-#include <vk_pipelines.hpp>
 
-bool VkUtil::loadShaderModule(const char *filePath, VkDevice device, VkShaderModule *outShaderModule) {
+bool jvk::loadShaderModule(const char *filePath, VkDevice device, VkShaderModule *outShaderModule) {
     std::ifstream file(filePath, std::ios::ate | std::ios::binary);
     if (!file.is_open()) {
         return false;
@@ -30,7 +30,7 @@ bool VkUtil::loadShaderModule(const char *filePath, VkDevice device, VkShaderMod
     return true;
 }
 
-void VkUtil::PipelineBuilder::clear() {
+void jvk::PipelineBuilder::clear() {
     _inputAssembly        = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
     _rasterizer           = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
     _colorBlendAttachment = {};
@@ -41,28 +41,28 @@ void VkUtil::PipelineBuilder::clear() {
     _shaderStages.clear();
 }
 
-void VkUtil::PipelineBuilder::setShaders(VkShaderModule vertexShader, VkShaderModule fragmentShader) {
+void jvk::PipelineBuilder::setShaders(VkShaderModule vertexShader, VkShaderModule fragmentShader) {
     _shaderStages.clear();
     _shaderStages.push_back(jvk::init::pipelineShaderStage(VK_SHADER_STAGE_VERTEX_BIT, vertexShader));
     _shaderStages.push_back(jvk::init::pipelineShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader));
 }
 
-void VkUtil::PipelineBuilder::setInputTopology(VkPrimitiveTopology topology) {
+void jvk::PipelineBuilder::setInputTopology(VkPrimitiveTopology topology) {
     _inputAssembly.topology               = topology;
     _inputAssembly.primitiveRestartEnable = VK_FALSE;
 }
 
-void VkUtil::PipelineBuilder::setPolygonMode(VkPolygonMode mode) {
+void jvk::PipelineBuilder::setPolygonMode(VkPolygonMode mode) {
     _rasterizer.polygonMode = mode;
     _rasterizer.lineWidth   = 1.0f;
 }
 
-void VkUtil::PipelineBuilder::setCullMode(VkCullModeFlags cullMode, VkFrontFace frontFace) {
+void jvk::PipelineBuilder::setCullMode(VkCullModeFlags cullMode, VkFrontFace frontFace) {
     _rasterizer.cullMode  = cullMode;
     _rasterizer.frontFace = frontFace;
 }
 
-void VkUtil::PipelineBuilder::setMultiSamplingNone() {
+void jvk::PipelineBuilder::setMultiSamplingNone() {
     _multisampling.sampleShadingEnable   = VK_FALSE;
     _multisampling.rasterizationSamples  = VK_SAMPLE_COUNT_1_BIT;
     _multisampling.minSampleShading      = 1.0f;
@@ -71,7 +71,7 @@ void VkUtil::PipelineBuilder::setMultiSamplingNone() {
     _multisampling.alphaToOneEnable      = VK_FALSE;
 }
 
-void VkUtil::PipelineBuilder::enableMultiSampling(VkSampleCountFlagBits sampleCount) {
+void jvk::PipelineBuilder::enableMultiSampling(VkSampleCountFlagBits sampleCount) {
     _multisampling.rasterizationSamples  = sampleCount;
     _multisampling.sampleShadingEnable   = VK_FALSE;
     _multisampling.minSampleShading      = 1.0f;
@@ -80,7 +80,7 @@ void VkUtil::PipelineBuilder::enableMultiSampling(VkSampleCountFlagBits sampleCo
     _multisampling.alphaToOneEnable      = VK_FALSE;
 }
 
-void VkUtil::PipelineBuilder::enableSampleShading(VkSampleCountFlagBits sampleCount, float minSampleShading) {
+void jvk::PipelineBuilder::enableSampleShading(VkSampleCountFlagBits sampleCount, float minSampleShading) {
     _multisampling.rasterizationSamples  = sampleCount;
     _multisampling.sampleShadingEnable   = VK_TRUE;
     _multisampling.minSampleShading      = minSampleShading;
@@ -90,21 +90,21 @@ void VkUtil::PipelineBuilder::enableSampleShading(VkSampleCountFlagBits sampleCo
 }
 
 
-void VkUtil::PipelineBuilder::disableBlending() {
+void jvk::PipelineBuilder::disableBlending() {
     _colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     _colorBlendAttachment.blendEnable    = VK_FALSE;
 }
 
-void VkUtil::PipelineBuilder::setColorAttachmentFormat(VkFormat format) {
+void jvk::PipelineBuilder::setColorAttachmentFormat(VkFormat format) {
     _colorAttachmentFormat                 = format;
     _renderingInfo.colorAttachmentCount    = 1;
     _renderingInfo.pColorAttachmentFormats = &_colorAttachmentFormat;
 }
 
-void VkUtil::PipelineBuilder::setDepthAttachmentFormat(VkFormat format) {
+void jvk::PipelineBuilder::setDepthAttachmentFormat(VkFormat format) {
     _renderingInfo.depthAttachmentFormat = format;
 }
-void VkUtil::PipelineBuilder::disableDepthTest() {
+void jvk::PipelineBuilder::disableDepthTest() {
     _depthStencil.depthTestEnable       = VK_FALSE;
     _depthStencil.depthWriteEnable      = VK_FALSE;
     _depthStencil.depthCompareOp        = VK_COMPARE_OP_NEVER;
@@ -116,7 +116,7 @@ void VkUtil::PipelineBuilder::disableDepthTest() {
     _depthStencil.maxDepthBounds        = 1.0f;
 }
 
-void VkUtil::PipelineBuilder::enableDepthTest(bool depthWriteEnable, VkCompareOp compareOp) {
+void jvk::PipelineBuilder::enableDepthTest(bool depthWriteEnable, VkCompareOp compareOp) {
     _depthStencil.depthTestEnable       = VK_TRUE;
     _depthStencil.depthWriteEnable      = depthWriteEnable;
     _depthStencil.depthCompareOp        = compareOp;
@@ -128,7 +128,7 @@ void VkUtil::PipelineBuilder::enableDepthTest(bool depthWriteEnable, VkCompareOp
     _depthStencil.maxDepthBounds        = 1.0f;
 }
 
-VkPipeline VkUtil::PipelineBuilder::buildPipeline(const VkDevice device) const {
+VkPipeline jvk::PipelineBuilder::buildPipeline(const VkDevice device) const {
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.pNext         = nullptr;
@@ -178,7 +178,7 @@ VkPipeline VkUtil::PipelineBuilder::buildPipeline(const VkDevice device) const {
     }
 }
 
-void VkUtil::PipelineBuilder::enableBlendingAdditive() {
+void jvk::PipelineBuilder::enableBlendingAdditive() {
     _colorBlendAttachment.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     _colorBlendAttachment.blendEnable         = VK_TRUE;
     _colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
@@ -189,7 +189,7 @@ void VkUtil::PipelineBuilder::enableBlendingAdditive() {
     _colorBlendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;
 }
 
-void VkUtil::PipelineBuilder::enableBlendingAlphaBlend() {
+void jvk::PipelineBuilder::enableBlendingAlphaBlend() {
     _colorBlendAttachment.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     _colorBlendAttachment.blendEnable         = VK_TRUE;
     _colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;

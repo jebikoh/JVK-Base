@@ -40,7 +40,7 @@ struct LoadedGLTF : public IRenderable {
 
     jvk::DynamicDescriptorAllocator descriptorPool;
 
-    AllocatedBuffer materialDataBuffer;
+    jvk::Buffer materialDataBuffer;
 
     JVKEngine *engine;
 

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <jvk.hpp>
+#include "jvk.hpp"
 
-namespace VkUtil {
+namespace jvk {
 
 bool loadShaderModule(const char *filePath, VkDevice device, VkShaderModule *outShaderModule);
 

@@ -12,13 +12,11 @@ add_executable(JVK_Engine src/main.cpp
         src/engine.hpp
         src/engine.cpp
         src/jvk/init.hpp
-        src/vk_util.hpp
-        src/vk_util.cpp
         src/vk_types.hpp
         src/jvk/descriptor.hpp
         src/jvk/descriptor.cpp
-        src/vk_pipelines.cpp
-        src/vk_pipelines.hpp
+        src/jvk/pipeline.cpp
+        src/jvk/pipeline.hpp
         src/mesh.hpp
         src/mesh.cpp
         src/camera.hpp
@@ -33,6 +31,9 @@ add_executable(JVK_Engine src/main.cpp
         src/immediate.hpp
         src/jvk/image.hpp
         src/jvk/sampler.hpp
+        src/jvk/util.hpp
+        src/jvk/util.cpp
+        src/jvk/buffer.hpp
 )
 
 if (JVK_ENABLE_PERF_FLAGS)

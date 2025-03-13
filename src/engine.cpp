@@ -1,8 +1,8 @@
-#include "jvk/init.hpp"
 #include <engine.hpp>
 #include <jvk.hpp>
-#include <vk_pipelines.hpp>
-#include <vk_util.hpp>
+#include <jvk/util.hpp>
+#include <jvk/init.hpp>
+#include <jvk/pipeline.hpp>
 
 #include <SDL.h>
 #include <SDL_vulkan.h>
@@ -105,7 +105,7 @@ void JVKEngine::cleanup() {
 
         // Default data
         metallicRoughnessMaterial_.clearResources(ctx_.device);
-        destroyBuffer(matConstants_);
+        matConstants_.destroy(allocator_);
 
         // ImGui
         ImGui_ImplVulkan_Shutdown();
@@ -172,7 +172,7 @@ void JVKEngine::draw() {
     VK_CHECK(cmd.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT));
 
     // Transition draw image to general
-    VkUtil::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    jvk::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
     ComputeEffect &effect = computeEffects_[currentComputeEffect_];
 
@@ -187,28 +187,28 @@ void JVKEngine::draw() {
     vkCmdDispatch(cmd, std::ceil(drawExtent_.width / 16.0f), std::ceil(drawExtent_.height / 16.0f), 1);
 
     // Transition draw/depth images for render pass
-    VkUtil::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    VkUtil::transitionImage(cmd, depthImage_.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    jvk::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    jvk::transitionImage(cmd, depthImage_.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
     drawGeometry(cmd);
 
     // Transition draw image to transfer source
-    VkUtil::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    jvk::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     // Transition swapchain image to transfer destination
-    VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    jvk::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     // Copy image to from draw image to swapchain
-    VkUtil::copyImageToImage(cmd, drawImage_.image, swapchain_.images[swapchainImageIndex], drawExtent_, swapchain_.extent);
+    jvk::copyImageToImage(cmd, drawImage_.image, swapchain_.images[swapchainImageIndex], drawExtent_, swapchain_.extent);
 
     // Transition swapchain to attachment optimal
-    VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    jvk::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
     // Draw UI
     drawImgui(cmd, swapchain_.imageViews[swapchainImageIndex]);
 
     // Transition swapchain for presentation
-    VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    jvk::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     // End command buffer
     VK_CHECK(cmd.end());
@@ -513,12 +513,12 @@ void JVKEngine::initBackgroundPipelines() {
 
     // PIPELINE STAGES (AND SHADERS)
     VkShaderModule gradientShader;
-    if (!VkUtil::loadShaderModule("../shaders/gradient_pc.comp.spv", ctx_.device, &gradientShader)) {
+    if (!jvk::loadShaderModule("../shaders/gradient_pc.comp.spv", ctx_.device, &gradientShader)) {
         fmt::print("Error when building gradient compute shader \n");
     }
 
     VkShaderModule skyShader;
-    if (!VkUtil::loadShaderModule("../shaders/sky.comp.spv", ctx_.device, &skyShader)) {
+    if (!jvk::loadShaderModule("../shaders/sky.comp.spv", ctx_.device, &skyShader)) {
         fmt::println("Error when building sky compute shader");
     }
 
@@ -650,7 +650,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
     // UNIFORM BUFFERS & GLOBAL DESCRIPTOR SET
     // Contains global scene data (projection matrices, light, etc)
-    AllocatedBuffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    jvk::Buffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     GPUSceneData *sceneUniformData     = static_cast<GPUSceneData *>(gpuSceneDataBuffer.allocation->GetMappedData());
     *sceneUniformData                  = sceneData_;
 
@@ -734,7 +734,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     stats_.meshDrawTime = elapsed.count() / 1000.0f;
 }
 
-AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const {
+jvk::Buffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const {
     VkBufferCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     info.pNext = nullptr;
@@ -745,13 +745,13 @@ AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usa
     allocInfo.usage = memoryUsage;
     allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    AllocatedBuffer buffer;
+    jvk::Buffer buffer;
     VK_CHECK(vmaCreateBuffer(allocator_, &info, &allocInfo, &buffer.buffer, &buffer.allocation, &buffer.info));
     return buffer;
 }
 
-void JVKEngine::destroyBuffer(const AllocatedBuffer &buffer) const {
-    vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
+void JVKEngine::destroyBuffer(const jvk::Buffer &buffer) const {
+    buffer.destroy(allocator_);
 }
 
 GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const {
@@ -774,7 +774,7 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
     surface.indexBuffer = createBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
     // STAGING BUFFER
-    AllocatedBuffer staging = createBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+    jvk::Buffer staging = createBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
     void *data              = staging.allocation->GetMappedData();
 
     // COPY DATA TO STAGING BUFFER
@@ -890,7 +890,7 @@ jvk::Image JVKEngine::createImage(const VkExtent3D size, const VkFormat format, 
 jvk::Image JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) const {
     // STAGING BUFFER
     size_t dataSize              = size.depth * size.width * size.height * 4;
-    AllocatedBuffer uploadBuffer = createBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    jvk::Buffer uploadBuffer = createBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     memcpy(uploadBuffer.info.pMappedData, data, dataSize);
 
     // COPY TO IMAGE
@@ -901,7 +901,7 @@ jvk::Image JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, 
 
     jvk::Image image = createImage(size, format, imgUsages, mipmapped);
     immBuffer_.submit(graphicsQueue_.queue, [&](VkCommandBuffer cmd) {
-        VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        jvk::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
         VkBufferImageCopy copyRegion{};
         copyRegion.bufferOffset      = 0;
@@ -917,9 +917,9 @@ jvk::Image JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, 
         vkCmdCopyBufferToImage(cmd, uploadBuffer.buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
         if (mipmapped) {
-            VkUtil::generateMipmaps(cmd, image.image, {image.imageExtent.width, image.imageExtent.height});
+            jvk::generateMipmaps(cmd, image.image, {image.imageExtent.width, image.imageExtent.height});
         } else {
-            VkUtil::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            jvk::transitionImage(cmd, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
     });
 
@@ -1007,6 +1007,10 @@ void JVKEngine::initDrawImages() {
     VK_CHECK(vkCreateImageView(ctx_.device, &depthImageViewInfo, nullptr, &depthImage_.imageView));
 }
 
+void JVKEngine::destroyImage(const jvk::Image &image) const {
+    image.destroy(ctx_, allocator_);
+}
+
 void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {
     glm::mat4 nodeMatrix = topMatrix * worldTransform;
 
@@ -1033,11 +1037,11 @@ void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {
 void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     // LOAD SHADERS
     VkShaderModule vertShader;
-    if (!VkUtil::loadShaderModule("../shaders/mesh.vert.spv", engine->ctx_.device, &vertShader)) {
+    if (!jvk::loadShaderModule("../shaders/mesh.vert.spv", engine->ctx_.device, &vertShader)) {
         fmt::print("Error when building vertex shader module");
     }
     VkShaderModule fragShader;
-    if (!VkUtil::loadShaderModule("../shaders/mesh.frag.spv", engine->ctx_.device, &fragShader)) {
+    if (!jvk::loadShaderModule("../shaders/mesh.frag.spv", engine->ctx_.device, &fragShader)) {
         fmt::print("Error when building fragment shader module");
     }
 
@@ -1070,7 +1074,7 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     transparentPipeline.pipelineLayout = layout;
 
     // PIPELINE
-    VkUtil::PipelineBuilder pipelineBuilder;
+    jvk::PipelineBuilder pipelineBuilder;
     pipelineBuilder.setShaders(vertShader, fragShader);
     pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
