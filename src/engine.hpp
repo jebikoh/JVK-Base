@@ -105,8 +105,12 @@ struct FrameData {
     jvk::Semaphore renderSemaphore;
     jvk::Fence renderFence;
 
+    // GLOBAL FRAME SCENE DATA
+    jvk::Buffer sceneDataBuffer;
+    VkDescriptorSet sceneDataDescriptorSet;
+
     DeletionStack deletionQueue;
-    jvk::DynamicDescriptorAllocator frameDescriptors;
+    jvk::DynamicDescriptorAllocator descriptorAllocator;
 };
 
 constexpr unsigned int JVK_NUM_FRAMES = 2;
@@ -156,9 +160,9 @@ public:
     // IMGUI
     VkDescriptorPool imguiPool_;
 
-    // MESHES
+    // SCENE DATA
     GPUSceneData sceneData_;
-    VkDescriptorSetLayout gpuSceneDataDescriptorLayout_;
+    VkDescriptorSetLayout sceneDataDescriptorLayout_;
 
     // TEXTURES
     jvk::Image whiteImage_;

@@ -90,9 +90,9 @@ void JVKEngine::cleanup() {
             frames_[i].renderSemaphore.destroy();
             frames_[i].swapchainSemaphore.destroy();
 
-            frames_[i].deletionQueue.flush();
+            frames_[i].sceneDataBuffer.destroy(allocator_);
 
-            frames_[i].frameDescriptors.destroyPools(ctx_.device);
+            frames_[i].descriptorAllocator.destroyPools(ctx_.device);
         }
 
         // Textures
@@ -122,7 +122,7 @@ void JVKEngine::cleanup() {
         // Descriptors
         globalDescriptorAllocator_.destroyPools(ctx_.device);
         vkDestroyDescriptorSetLayout(ctx_.device, drawImageDescriptorLayout_, nullptr);
-        vkDestroyDescriptorSetLayout(ctx_.device, gpuSceneDataDescriptorLayout_, nullptr);
+        vkDestroyDescriptorSetLayout(ctx_.device, sceneDataDescriptorLayout_, nullptr);
         vkDestroyDescriptorSetLayout(ctx_.device, singleImageDescriptorLayout_, nullptr);
 
         // Depth image
@@ -149,7 +149,7 @@ void JVKEngine::draw() {
     updateScene();
     // Wait and reset render fence
     VK_CHECK(getCurrentFrame().renderFence.wait());
-    getCurrentFrame().frameDescriptors.clearPools(ctx_.device);
+    getCurrentFrame().descriptorAllocator.clearPools(ctx_.device);
 
     VK_CHECK(getCurrentFrame().renderFence.reset());
 
@@ -453,13 +453,23 @@ void JVKEngine::initDescriptors() {
         drawImageDescriptorLayout_ = builder.build(ctx_.device, VK_SHADER_STAGE_COMPUTE_BIT);
     }
 
-    // Allocate set
-    drawImageDescriptors_ = globalDescriptorAllocator_.allocate(ctx_.device, drawImageDescriptorLayout_);
+    // DRAW IMAGE DESCRIPTOR
+    {
+        // Allocate set
+        drawImageDescriptors_ = globalDescriptorAllocator_.allocate(ctx_.device, drawImageDescriptorLayout_);
 
-    // Write to set
-    jvk::DescriptorWriter writer;
-    writer.writeImage(0, drawImage_.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-    writer.updateSet(ctx_.device, drawImageDescriptors_);
+        // Write to set
+        jvk::DescriptorWriter writer;
+        writer.writeImage(0, drawImage_.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        writer.updateSet(ctx_.device, drawImageDescriptors_);
+    }
+
+    // GPU SCENE DATA
+    {
+        jvk::DescriptorLayoutBuilder builder;
+        builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        sceneDataDescriptorLayout_ = builder.build(ctx_.device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    }
 
     // FRAME DESCRIPTORS
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
@@ -470,15 +480,14 @@ void JVKEngine::initDescriptors() {
                 {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
         };
 
-        frames_[i].frameDescriptors = jvk::DynamicDescriptorAllocator();
-        frames_[i].frameDescriptors.init(ctx_.device, 1000, frameSizes);
-    }
+        frames_[i].descriptorAllocator = jvk::DynamicDescriptorAllocator();
+        frames_[i].descriptorAllocator.init(ctx_.device, 1000, frameSizes);
 
-    // GPU SCENE DATA
-    {
-        jvk::DescriptorLayoutBuilder builder;
-        builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-        gpuSceneDataDescriptorLayout_ = builder.build(ctx_.device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+        // Allocate scene data descriptor set
+        frames_[i].sceneDataDescriptorSet = globalDescriptorAllocator_.allocate(ctx_, sceneDataDescriptorLayout_);
+
+        // Create corresponding buffer
+        frames_[i].sceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     }
 
     // TEXTURES
@@ -650,18 +659,13 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
     // UNIFORM BUFFERS & GLOBAL DESCRIPTOR SET
     // Contains global scene data (projection matrices, light, etc)
-    jvk::Buffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-    GPUSceneData *sceneUniformData     = static_cast<GPUSceneData *>(gpuSceneDataBuffer.allocation->GetMappedData());
+    jvk::Buffer sceneDataBuffer = getCurrentFrame().sceneDataBuffer;
+    GPUSceneData *sceneUniformData     = static_cast<GPUSceneData *>(sceneDataBuffer.allocation->GetMappedData());
     *sceneUniformData                  = sceneData_;
 
-    VkDescriptorSet globalDescriptor = getCurrentFrame().frameDescriptors.allocate(ctx_.device, gpuSceneDataDescriptorLayout_);
     jvk::DescriptorWriter writer;
-    writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    writer.updateSet(ctx_.device, globalDescriptor);
-
-    getCurrentFrame().deletionQueue.push([=, this]() {
-        destroyBuffer(gpuSceneDataBuffer);
-    });
+    writer.writeBuffer(0, sceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    writer.updateSet(ctx_.device, getCurrentFrame().sceneDataDescriptorSet);
 
     MaterialPipeline *lastPipeline = nullptr;
     MaterialInstance *lastMaterial = nullptr;
@@ -676,7 +680,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
                 lastPipeline = r.material->pipeline;
 
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipeline);
-                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipelineLayout, 0, 1, &getCurrentFrame().sceneDataDescriptorSet, 0, nullptr);
 
                 VkViewport viewport{};
                 viewport.x        = 0;
@@ -1058,7 +1062,7 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     materialDescriptorLayout = builder.build(engine->ctx_.device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     // _gpuSceneDataDescriptorLayout is used as our global descriptor layout
-    VkDescriptorSetLayout layouts[] = {engine->gpuSceneDataDescriptorLayout_, materialDescriptorLayout};
+    VkDescriptorSetLayout layouts[] = {engine->sceneDataDescriptorLayout_, materialDescriptorLayout};
 
     // PIPELINE LAYOUT
     VkPipelineLayoutCreateInfo layoutInfo = jvk::init::pipelineLayout();
