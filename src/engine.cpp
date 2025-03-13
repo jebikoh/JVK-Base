@@ -96,8 +96,8 @@ void JVKEngine::cleanup() {
         }
 
         // Textures
-        vkDestroySampler(context_.device, _defaultSamplerLinear, nullptr);
-        vkDestroySampler(context_.device, _defaultSamplerNearest, nullptr);
+        defaultSamplerLinear_.destroy();
+        defaultSamplerLinear_.destroy();
 
         errorCheckerboardImage_.destroy(context_, allocator_);
         blackImage_.destroy(context_, allocator_);
@@ -438,7 +438,7 @@ void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
 
 void JVKEngine::initDescriptors() {
     // GLOBAL DESCRIPTOR ALLOCATOR
-    std::vector<DynamicDescriptorAllocator::PoolSizeRatio> sizes =
+    std::vector<jvk::DynamicDescriptorAllocator::PoolSizeRatio> sizes =
             {
                     {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
                     {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}};
@@ -448,7 +448,7 @@ void JVKEngine::initDescriptors() {
     // DRAW IMAGE
     // Layout
     {
-        DescriptorLayoutBuilder builder;
+        jvk::DescriptorLayoutBuilder builder;
         builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
         _drawImageDescriptorLayout = builder.build(context_.device, VK_SHADER_STAGE_COMPUTE_BIT);
     }
@@ -457,33 +457,33 @@ void JVKEngine::initDescriptors() {
     _drawImageDescriptors = _globalDescriptorAllocator.allocate(context_.device, _drawImageDescriptorLayout);
 
     // Write to set
-    DescriptorWriter writer;
+    jvk::DescriptorWriter writer;
     writer.writeImage(0, _drawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
     writer.updateSet(context_.device, _drawImageDescriptors);
 
     // FRAME DESCRIPTORS
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-        std::vector<DynamicDescriptorAllocator::PoolSizeRatio> frameSizes = {
+        std::vector<jvk::DynamicDescriptorAllocator::PoolSizeRatio> frameSizes = {
                 {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3},
                 {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
                 {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
                 {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
         };
 
-        frames_[i].frameDescriptors = DynamicDescriptorAllocator();
+        frames_[i].frameDescriptors = jvk::DynamicDescriptorAllocator();
         frames_[i].frameDescriptors.init(context_.device, 1000, frameSizes);
     }
 
     // GPU SCENE DATA
     {
-        DescriptorLayoutBuilder builder;
+        jvk::DescriptorLayoutBuilder builder;
         builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         _gpuSceneDataDescriptorLayout = builder.build(context_.device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     }
 
     // TEXTURES
     {
-        DescriptorLayoutBuilder builder;
+        jvk::DescriptorLayoutBuilder builder;
         builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         _singleImageDescriptorLayout = builder.build(context_.device, VK_SHADER_STAGE_FRAGMENT_BIT);
     }
@@ -655,7 +655,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     *sceneUniformData                  = sceneData;
 
     VkDescriptorSet globalDescriptor = getCurrentFrame().frameDescriptors.allocate(context_.device, _gpuSceneDataDescriptorLayout);
-    DescriptorWriter writer;
+    jvk::DescriptorWriter writer;
     writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     writer.updateSet(context_.device, globalDescriptor);
 
@@ -823,22 +823,15 @@ void JVKEngine::initDefaultData() {
     errorCheckerboardImage_ = createImage(pixels.data(), VkExtent3D{16, 16, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     // SAMPLERS
-    VkSamplerCreateInfo sampler{};
-    sampler.sType     = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    sampler.magFilter = VK_FILTER_NEAREST;
-    sampler.minFilter = VK_FILTER_NEAREST;
-    vkCreateSampler(context_.device, &sampler, nullptr, &_defaultSamplerNearest);
-
-    sampler.magFilter = VK_FILTER_LINEAR;
-    sampler.minFilter = VK_FILTER_LINEAR;
-    vkCreateSampler(context_.device, &sampler, nullptr, &_defaultSamplerLinear);
+    VK_CHECK(defaultSamplerNearest_.init(context_, VK_FILTER_NEAREST, VK_FILTER_NEAREST));
+    VK_CHECK(defaultSamplerLinear_.init(context_, VK_FILTER_LINEAR, VK_FILTER_LINEAR));
 
     // MATERIALS
     GLTFMetallicRoughness::MaterialResources matResources;
     matResources.colorImage               = whiteImage_;
-    matResources.colorSampler             = _defaultSamplerLinear;
+    matResources.colorSampler             = defaultSamplerLinear_;
     matResources.metallicRoughnessImage   = whiteImage_;
-    matResources.metallicRoughnessSampler = _defaultSamplerLinear;
+    matResources.metallicRoughnessSampler = defaultSamplerLinear_;
 
     _matConstants                                              = createBuffer(sizeof(GLTFMetallicRoughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     GLTFMetallicRoughness::MaterialConstants *sceneUniformData = static_cast<GLTFMetallicRoughness::MaterialConstants *>(_matConstants.allocation->GetMappedData());
@@ -1055,7 +1048,7 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     // DESCRIPTOR LAYOUT
-    DescriptorLayoutBuilder builder;
+    jvk::DescriptorLayoutBuilder builder;
     builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -1100,7 +1093,7 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     vkDestroyShaderModule(engine->context_.device, fragShader, nullptr);
 }
 
-MaterialInstance GLTFMetallicRoughness::writeMaterial(const VkDevice device, const MaterialPass pass, const MaterialResources &resources, DynamicDescriptorAllocator &descriptorAllocator) {
+MaterialInstance GLTFMetallicRoughness::writeMaterial(const VkDevice device, const MaterialPass pass, const MaterialResources &resources, jvk::DynamicDescriptorAllocator &descriptorAllocator) {
     MaterialInstance matData;
     matData.passType = pass;
     if (pass == MaterialPass::TRANSPARENT) {

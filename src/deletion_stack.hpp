@@ -3,7 +3,7 @@
 #include <jvk.hpp>
 #include <stack>
 
-struct DeletionQueue {
+struct DeletionStack {
     std::stack<std::function<void()>> deletors;
 
     void push(std::function<void()> &&function) {

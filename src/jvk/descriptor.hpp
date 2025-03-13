@@ -2,6 +2,9 @@
 
 #include <jvk.hpp>
 
+namespace jvk {
+
+
 // VULKAN DESCRIPTORS
 // VkDescriptorSetLayout -> VkDescriptorPool (Allocate) -> VkDescriptorSet
 // VkDescriptorSet holds bindings (pointers) to various resources on GPU.
@@ -64,3 +67,6 @@ struct DescriptorWriter {
     void clear();
     void updateSet(VkDevice device, VkDescriptorSet set);
 };
+
+
+}

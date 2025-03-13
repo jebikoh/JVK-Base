@@ -1,4 +1,6 @@
-#include <vk_descriptors.hpp>
+#include <jvk/descriptor.hpp>
+
+namespace jvk {
 
 void DescriptorLayoutBuilder::addBinding(uint32_t binding, VkDescriptorType type) {
     VkDescriptorSetLayoutBinding newBinding{};
@@ -202,9 +204,11 @@ void DescriptorWriter::clear() {
 }
 
 void DescriptorWriter::updateSet(VkDevice device, VkDescriptorSet set) {
-    for (VkWriteDescriptorSet  &write : writes) {
+    for (VkWriteDescriptorSet &write: writes) {
         write.dstSet = set;
     }
 
     vkUpdateDescriptorSets(device, (uint32_t) writes.size(), writes.data(), 0, nullptr);
+}
+
 }

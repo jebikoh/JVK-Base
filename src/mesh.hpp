@@ -1,10 +1,10 @@
 #pragma once
 #include "fastgltf/types.hpp"
-#include "vk_descriptors.hpp"
 #include "vk_types.hpp"
 
 #include <filesystem>
 #include <jvk.hpp>
+#include <jvk/descriptor.hpp>
 
 namespace jvk {
 struct Image;
@@ -38,7 +38,7 @@ struct LoadedGLTF : public IRenderable {
     std::vector<std::shared_ptr<Node>> topNodes;
     std::vector<VkSampler> samplers;
 
-    DynamicDescriptorAllocator descriptorPool;
+    jvk::DynamicDescriptorAllocator descriptorPool;
 
     AllocatedBuffer materialDataBuffer;
 

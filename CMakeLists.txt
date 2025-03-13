@@ -15,8 +15,8 @@ add_executable(JVK_Engine src/main.cpp
         src/vk_util.hpp
         src/vk_util.cpp
         src/vk_types.hpp
-        src/vk_descriptors.hpp
-        src/vk_descriptors.cpp
+        src/jvk/descriptor.hpp
+        src/jvk/descriptor.cpp
         src/vk_pipelines.cpp
         src/vk_pipelines.hpp
         src/mesh.hpp
@@ -32,6 +32,7 @@ add_executable(JVK_Engine src/main.cpp
         src/deletion_stack.hpp
         src/immediate.hpp
         src/jvk/image.hpp
+        src/jvk/sampler.hpp
 )
 
 if (JVK_ENABLE_PERF_FLAGS)

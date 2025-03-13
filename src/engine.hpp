@@ -7,16 +7,17 @@
 #include <deletion_stack.hpp>
 #include <jvk.hpp>
 #include <stack>
-#include <vk_descriptors.hpp>
 #include <vk_types.hpp>
 
-#include <jvk/context.hpp>
-#include <jvk/swapchain.hpp>
 #include <jvk/commands.hpp>
+#include <jvk/context.hpp>
 #include <jvk/fence.hpp>
-#include <jvk/semaphore.hpp>
-#include <jvk/queue.hpp>
 #include <jvk/image.hpp>
+#include <jvk/queue.hpp>
+#include <jvk/semaphore.hpp>
+#include <jvk/swapchain.hpp>
+#include <jvk/descriptor.hpp>
+#include <jvk/sampler.hpp>
 
 class JVKEngine;
 
@@ -65,12 +66,12 @@ struct GLTFMetallicRoughness {
         uint32_t dataBufferOffset;
     };
 
-    DescriptorWriter writer;
+    jvk::DescriptorWriter writer;
 
     void buildPipelines(JVKEngine *engine);
     void clearResources(VkDevice device) const;
 
-    MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources &resources, DynamicDescriptorAllocator &descriptorAllocator);
+    MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources &resources, jvk::DynamicDescriptorAllocator &descriptorAllocator);
 };
 
 struct MeshAsset;
@@ -103,8 +104,8 @@ struct FrameData {
     jvk::Semaphore renderSemaphore;
     jvk::Fence renderFence;
 
-    DeletionQueue deletionQueue;
-    DynamicDescriptorAllocator frameDescriptors;
+    DeletionStack deletionQueue;
+    jvk::DynamicDescriptorAllocator frameDescriptors;
 };
 
 constexpr unsigned int JVK_NUM_FRAMES = 2;
@@ -138,7 +139,7 @@ public:
     float renderScale = 1.0f;
 
     // DESCRIPTORS
-    DynamicDescriptorAllocator _globalDescriptorAllocator;
+    jvk::DynamicDescriptorAllocator _globalDescriptorAllocator;
     VkDescriptorSet _drawImageDescriptors;
     VkDescriptorSetLayout _drawImageDescriptorLayout;
 
@@ -163,8 +164,8 @@ public:
     jvk::Image blackImage_;
     jvk::Image errorCheckerboardImage_;
 
-    VkSampler _defaultSamplerLinear;
-    VkSampler _defaultSamplerNearest;
+    jvk::Sampler defaultSamplerLinear_;
+    jvk::Sampler defaultSamplerNearest_;
 
     VkDescriptorSetLayout _singleImageDescriptorLayout;
 

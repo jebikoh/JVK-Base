@@ -179,7 +179,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
     }
 
     // SETUP DESCRIPTOR POOLS
-    std::vector<DynamicDescriptorAllocator::PoolSizeRatio> sizes = {
+    std::vector<jvk::DynamicDescriptorAllocator::PoolSizeRatio> sizes = {
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
             {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
             {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3}};
@@ -258,9 +258,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
         GLTFMetallicRoughness::MaterialResources matResources;
         // Default textures & samplers
         matResources.colorImage               = engine->whiteImage_;
-        matResources.colorSampler             = engine->_defaultSamplerLinear;
+        matResources.colorSampler             = engine->defaultSamplerLinear_;
         matResources.metallicRoughnessImage   = engine->whiteImage_;
-        matResources.metallicRoughnessSampler = engine->_defaultSamplerLinear;
+        matResources.metallicRoughnessSampler = engine->defaultSamplerLinear_;
 
         // Uniform Buffer
         matResources.dataBuffer       = file.materialDataBuffer.buffer;
