@@ -287,35 +287,45 @@ void JVKEngine::run() {
 
         ImGui::NewFrame();
 
-        ImGui::Begin("Stats");
+        ImGui::Begin("Control Panel");
 
-        ImGui::Text("Frame time %f ms", stats_.frameTime);
-        ImGui::Text("Draw time %f ms", stats_.meshDrawTime);
-        ImGui::Text("Update time %f ms", stats_.sceneUpdateTime);
-        ImGui::Text("Triangles %i", stats_.triangleCount);
-        ImGui::Text("Draws %i", stats_.drawCallCount);
-        ImGui::End();
+        if (ImGui::BeginTabBar("MainTabs"))
+        {
+            if (ImGui::BeginTabItem("Stats"))
+            {
+                ImGui::Text("Frame time %f ms", stats_.frameTime);
+                ImGui::Text("Draw time %f ms", stats_.meshDrawTime);
+                ImGui::Text("Update time %f ms", stats_.sceneUpdateTime);
+                ImGui::Text("Triangles %i", stats_.triangleCount);
+                ImGui::Text("Draws %i", stats_.drawCallCount);
+                ImGui::EndTabItem();
+            }
 
-        if (ImGui::Begin("Camera")) {
-            ImGui::SliderFloat("Speed", &mainCamera_.speed, 0.0f, 1000.0f);
+            if (ImGui::BeginTabItem("Camera"))
+            {
+                ImGui::SliderFloat("Speed", &mainCamera_.speed, 0.0f, 1000.0f);
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Compute Effects"))
+            {
+                ImGui::SliderFloat("Render Scale", &renderScale_, 0.3f, 1.0f);
+
+                ComputeEffect &selected = computeEffects_[currentComputeEffect_];
+
+                ImGui::Text("Selected effect: %s", selected.name); // Changed to %s for string
+                ImGui::SliderInt("Effect Index", &currentComputeEffect_, 0, computeEffects_.size() - 1);
+
+                ImGui::InputFloat4("Input 1", reinterpret_cast<float *>(&selected.data.data1));
+                ImGui::InputFloat4("Input 2", reinterpret_cast<float *>(&selected.data.data2));
+                ImGui::InputFloat4("Input 3", reinterpret_cast<float *>(&selected.data.data3));
+                ImGui::InputFloat4("Input 4", reinterpret_cast<float *>(&selected.data.data4));
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
         }
-        ImGui::End();
 
-        if (ImGui::Begin("computeEffects")) {
-
-            ImGui::SliderFloat("Render Scale", &renderScale_, 0.3f, 1.0f);
-
-            ComputeEffect &selected = computeEffects_[currentComputeEffect_];
-
-            ImGui::Text("Selected effect: ", selected.name);
-
-            ImGui::SliderInt("Effect Index", &currentComputeEffect_, 0, computeEffects_.size() - 1);
-
-            ImGui::InputFloat4("data1", reinterpret_cast<float *>(&selected.data.data1));
-            ImGui::InputFloat4("data2", reinterpret_cast<float *>(&selected.data.data2));
-            ImGui::InputFloat4("data3", reinterpret_cast<float *>(&selected.data.data3));
-            ImGui::InputFloat4("data4", reinterpret_cast<float *>(&selected.data.data4));
-        }
         ImGui::End();
 
         ImGui::Render();
