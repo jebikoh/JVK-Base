@@ -1,5 +1,5 @@
+#include "jvk/init.hpp"
 #include <fstream>
-#include <vk_init.hpp>
 #include <vk_pipelines.hpp>
 
 bool VkUtil::loadShaderModule(const char *filePath, VkDevice device, VkShaderModule *outShaderModule) {
@@ -43,8 +43,8 @@ void VkUtil::PipelineBuilder::clear() {
 
 void VkUtil::PipelineBuilder::setShaders(VkShaderModule vertexShader, VkShaderModule fragmentShader) {
     _shaderStages.clear();
-    _shaderStages.push_back(VkInit::pipelineShaderStage(VK_SHADER_STAGE_VERTEX_BIT, vertexShader));
-    _shaderStages.push_back(VkInit::pipelineShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader));
+    _shaderStages.push_back(jvk::init::pipelineShaderStage(VK_SHADER_STAGE_VERTEX_BIT, vertexShader));
+    _shaderStages.push_back(jvk::init::pipelineShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader));
 }
 
 void VkUtil::PipelineBuilder::setInputTopology(VkPrimitiveTopology topology) {

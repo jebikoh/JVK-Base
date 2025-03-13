@@ -1,6 +1,6 @@
+#include "jvk/init.hpp"
 #include <engine.hpp>
 #include <jvk.hpp>
-#include <vk_init.hpp>
 #include <vk_pipelines.hpp>
 #include <vk_util.hpp>
 
@@ -431,7 +431,7 @@ void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
     float flash = std::abs(std::sin(frameNumber_ / 120.0f));
     clearValue  = {{0.0f, 0.0f, flash, 1.0f}};
 
-    VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+    VkImageSubresourceRange clearRange = jvk::init::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
 
     vkCmdClearColorImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
 }
@@ -609,8 +609,8 @@ void JVKEngine::initImgui() {
 
 void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) const {
     // Setup color attachment for render pass
-    VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    VkRenderingInfo renderInfo                = VkInit::rendering(swapchain_.extent, &colorAttachment, nullptr);
+    VkRenderingAttachmentInfo colorAttachment = jvk::init::renderingAttachment(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkRenderingInfo renderInfo                = jvk::init::rendering(swapchain_.extent, &colorAttachment, nullptr);
 
     // Render
     vkCmdBeginRendering(cmd, &renderInfo);
@@ -641,9 +641,9 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     });
 
     // SETUP RENDER PASS
-    VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(drawImage_.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    VkRenderingAttachmentInfo depthAttachment = VkInit::depthRenderingAttachment(depthImage_.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-    VkRenderingInfo renderingInfo             = VkInit::rendering(drawExtent_, &colorAttachment, &depthAttachment);
+    VkRenderingAttachmentInfo colorAttachment = jvk::init::renderingAttachment(drawImage_.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkRenderingAttachmentInfo depthAttachment = jvk::init::depthRenderingAttachment(depthImage_.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    VkRenderingInfo renderingInfo             = jvk::init::rendering(drawExtent_, &colorAttachment, &depthAttachment);
 
     // BEGIN RENDER PASS
     vkCmdBeginRendering(cmd, &renderingInfo);
@@ -862,7 +862,7 @@ jvk::Image JVKEngine::createImage(const VkExtent3D size, const VkFormat format, 
     jvk::Image image;
     image.imageFormat           = format;
     image.imageExtent           = size;
-    VkImageCreateInfo imageInfo = VkInit::image(format, usage, size, sampleCount);
+    VkImageCreateInfo imageInfo = jvk::init::image(format, usage, size, sampleCount);
     if (mipmapped) {
         imageInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
     }
@@ -880,7 +880,7 @@ jvk::Image JVKEngine::createImage(const VkExtent3D size, const VkFormat format, 
     }
 
     // IMAGE VIEW
-    VkImageViewCreateInfo viewInfo       = VkInit::imageView(format, image.image, aspectFlag);
+    VkImageViewCreateInfo viewInfo       = jvk::init::imageView(format, image.image, aspectFlag);
     viewInfo.subresourceRange.levelCount = imageInfo.mipLevels;
     VK_CHECK(vkCreateImageView(ctx_.device, &viewInfo, nullptr, &image.imageView));
 
@@ -980,7 +980,7 @@ void JVKEngine::initDrawImages() {
     drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;         // Allow compute shader to write
     drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;// Graphics pipeline
 
-    VkImageCreateInfo drawImageInfo = VkInit::image(drawImage_.imageFormat, drawImageUsages, drawImageExtent);
+    VkImageCreateInfo drawImageInfo = jvk::init::image(drawImage_.imageFormat, drawImageUsages, drawImageExtent);
 
     // VMA_MEMORY_USAGE_GPU_ONLY: the texture will never be accessed from the CPU
     // VK_MEMORY_PROPERTYcontext_.device_LOCAL_BIT: GPU exclusive memory flag, guarantees that the memory is on the GPU
@@ -990,7 +990,7 @@ void JVKEngine::initDrawImages() {
 
     vmaCreateImage(allocator_, &drawImageInfo, &drawImageAllocInfo, &drawImage_.image, &drawImage_.allocation, nullptr);
 
-    VkImageViewCreateInfo imageViewInfo = VkInit::imageView(drawImage_.imageFormat, drawImage_.image, VK_IMAGE_ASPECT_COLOR_BIT);
+    VkImageViewCreateInfo imageViewInfo = jvk::init::imageView(drawImage_.imageFormat, drawImage_.image, VK_IMAGE_ASPECT_COLOR_BIT);
     VK_CHECK(vkCreateImageView(ctx_.device, &imageViewInfo, nullptr, &drawImage_.imageView));
 
     // CREATE DEPTH IMAGE
@@ -1000,10 +1000,10 @@ void JVKEngine::initDrawImages() {
     VkImageUsageFlags depthImageUsages{};
     depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-    VkImageCreateInfo depthImageInfo = VkInit::image(depthImage_.imageFormat, depthImageUsages, drawImageExtent);
+    VkImageCreateInfo depthImageInfo = jvk::init::image(depthImage_.imageFormat, depthImageUsages, drawImageExtent);
     vmaCreateImage(allocator_, &depthImageInfo, &drawImageAllocInfo, &depthImage_.image, &depthImage_.allocation, nullptr);
 
-    VkImageViewCreateInfo depthImageViewInfo = VkInit::imageView(depthImage_.imageFormat, depthImage_.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+    VkImageViewCreateInfo depthImageViewInfo = jvk::init::imageView(depthImage_.imageFormat, depthImage_.image, VK_IMAGE_ASPECT_DEPTH_BIT);
     VK_CHECK(vkCreateImageView(ctx_.device, &depthImageViewInfo, nullptr, &depthImage_.imageView));
 }
 
@@ -1057,7 +1057,7 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     VkDescriptorSetLayout layouts[] = {engine->gpuSceneDataDescriptorLayout_, materialDescriptorLayout};
 
     // PIPELINE LAYOUT
-    VkPipelineLayoutCreateInfo layoutInfo = VkInit::pipelineLayout();
+    VkPipelineLayoutCreateInfo layoutInfo = jvk::init::pipelineLayout();
     layoutInfo.setLayoutCount             = 2;
     layoutInfo.pSetLayouts                = layouts;
     layoutInfo.pPushConstantRanges        = &matrixRange;

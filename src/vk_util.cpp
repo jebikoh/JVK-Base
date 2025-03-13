@@ -1,4 +1,4 @@
-#include <vk_init.hpp>
+#include "jvk/init.hpp"
 #include <vk_util.hpp>
 
 void VkUtil::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
@@ -30,7 +30,7 @@ void VkUtil::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout o
 
     // Target the correct part of the image
     VkImageAspectFlags aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-    imageBarrier.subresourceRange = VkInit::imageSubresourceRange(aspectMask);
+    imageBarrier.subresourceRange = jvk::init::imageSubresourceRange(aspectMask);
     imageBarrier.image = image;
 
     // Create the dependency & submit
@@ -101,7 +101,7 @@ void VkUtil::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imag
         barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
         VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange = VkInit::imageSubresourceRange(aspectMask);
+        barrier.subresourceRange = jvk::init::imageSubresourceRange(aspectMask);
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseMipLevel = mip;
         barrier.image = image;

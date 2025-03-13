@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vk_init.hpp"
+#include "jvk/init.hpp"
 #include <jvk.hpp>
 #include <jvk/commands.hpp>
 #include <jvk/fence.hpp>
@@ -42,7 +42,7 @@ struct ImmediateBuffer {
 
         // Submit and wait for fence
         VkCommandBufferSubmitInfo cmdInfo = cmd.submitInfo();
-        VkSubmitInfo2 submit              = VkInit::submit(&cmdInfo, nullptr, nullptr);
+        VkSubmitInfo2 submit              = jvk::init::submit(&cmdInfo, nullptr, nullptr);
         VK_CHECK(vkQueueSubmit2(queue, 1, &submit, fence));
         fence.wait();
     }

@@ -1,7 +1,7 @@
 #pragma once
-#include <jvk.hpp>
+#include "jvk.hpp"
 
-namespace VkInit {
+namespace jvk::init {
 
 inline VkCommandPoolCreateInfo commandPool(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags = 0) {
     VkCommandPoolCreateInfo info = {};
