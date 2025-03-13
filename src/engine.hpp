@@ -119,7 +119,7 @@ public:
 
     float deltaTime_     = 1;
 
-    jvk::Context context_;
+    jvk::Context ctx_;
     jvk::Swapchain swapchain_;
 
     // FRAME DATA
@@ -133,31 +133,31 @@ public:
     VmaAllocator allocator_;
 
     // DRAW IMAGES
-    jvk::Image _drawImage;
-    jvk::Image _depthImage;
-    VkExtent2D _drawExtent;
-    float renderScale = 1.0f;
+    jvk::Image drawImage_;
+    jvk::Image depthImage_;
+    VkExtent2D drawExtent_;
+    float renderScale_ = 1.0f;
 
     // DESCRIPTORS
-    jvk::DynamicDescriptorAllocator _globalDescriptorAllocator;
-    VkDescriptorSet _drawImageDescriptors;
-    VkDescriptorSetLayout _drawImageDescriptorLayout;
+    jvk::DynamicDescriptorAllocator globalDescriptorAllocator_;
+    VkDescriptorSet drawImageDescriptors_;
+    VkDescriptorSetLayout drawImageDescriptorLayout_;
 
     // PIPELINES
-    std::vector<ComputeEffect> computeEffects;
-    int currentComputeEffect{0};
-    VkPipeline _gradientPipeline;
-    VkPipelineLayout _gradientPipelineLayout;
+    std::vector<ComputeEffect> computeEffects_;
+    int currentComputeEffect_{0};
+    VkPipeline computePipeline_;
+    VkPipelineLayout computePipelineLayout_;
 
     // IMMEDIATE COMMANDS
     ImmediateBuffer immBuffer_;
 
     // IMGUI
-    VkDescriptorPool _imguiPool;
+    VkDescriptorPool imguiPool_;
 
     // MESHES
-    GPUSceneData sceneData;
-    VkDescriptorSetLayout _gpuSceneDataDescriptorLayout;
+    GPUSceneData sceneData_;
+    VkDescriptorSetLayout gpuSceneDataDescriptorLayout_;
 
     // TEXTURES
     jvk::Image whiteImage_;
@@ -167,20 +167,20 @@ public:
     jvk::Sampler defaultSamplerLinear_;
     jvk::Sampler defaultSamplerNearest_;
 
-    VkDescriptorSetLayout _singleImageDescriptorLayout;
+    VkDescriptorSetLayout singleImageDescriptorLayout_;
 
     // MATERIALS
-    GLTFMetallicRoughness _metallicRoughnessMaterial;
-    MaterialInstance _defaultMaterialData;
-    AllocatedBuffer _matConstants;
+    GLTFMetallicRoughness metallicRoughnessMaterial_;
+    MaterialInstance defaultMaterialData_;
+    AllocatedBuffer matConstants_;
 
     // SCENE
-    DrawContext _mainDrawContext;
-    std::unordered_map<std::string, std::shared_ptr<Node>> _loadedNodes;
-    std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
+    DrawContext drawCtx_;
+    std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes_;
+    std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes_;
 
     // CAMERA
-    Camera _mainCamera;
+    Camera mainCamera_;
 
     struct EngineStats {
         float frameTime;
@@ -188,13 +188,13 @@ public:
         int drawCallCount;
         int sceneUpdateTime;
         int meshDrawTime;
-    } _stats;
+    } stats_;
 
     // MSAA
-    VkSampleCountFlagBits _maxMsaaSamples = VK_SAMPLE_COUNT_1_BIT;
-    VkSampleCountFlagBits _selectedMsaaSamples = VK_SAMPLE_COUNT_4_BIT;
+    VkSampleCountFlagBits maxMsaaSamples_      = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits selectedMsaaSamples_ = VK_SAMPLE_COUNT_4_BIT;
 
-    struct SDL_Window *_window = nullptr;
+    struct SDL_Window *window_ = nullptr;
 
     static JVKEngine &get();
 
@@ -218,7 +218,7 @@ public:
 
     void updateScene();
 private:
-    bool _resizeRequested = false;
+    bool resizeRequested_ = false;
     void resizeSwapchain();
 
     // INITIALIZATION

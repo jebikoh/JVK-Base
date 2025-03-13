@@ -41,7 +41,7 @@ void JVKEngine::init() {
 
     SDL_WindowFlags windowFlags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
-    _window = SDL_CreateWindow(
+    window_ = SDL_CreateWindow(
             "JVK",
             SDL_WINDOWPOS_UNDEFINED,
             SDL_WINDOWPOS_UNDEFINED,
@@ -60,16 +60,16 @@ void JVKEngine::init() {
     initDefaultData();
 
     // CAMERA
-    _mainCamera.velocity = glm::vec3(0.0f);
-    _mainCamera.position = glm::vec3(30.f, -00.f, -085.f);
-    _mainCamera.pitch    = 0.0f;
-    _mainCamera.yaw      = 0.0f;
+    mainCamera_.velocity = glm::vec3(0.0f);
+    mainCamera_.position = glm::vec3(30.f, -00.f, -085.f);
+    mainCamera_.pitch    = 0.0f;
+    mainCamera_.yaw      = 0.0f;
 
     // SCENE
     std::string scenePath = "../assets/sponza.glb";
     auto sceneFile        = loadGLTF(this, scenePath);
     assert(sceneFile.has_value());
-    loadedScenes["base_scene"] = *sceneFile;
+    loadedScenes_["base_scene"] = *sceneFile;
 
     isInitialized_ = true;
     fmt::print("Engine initialized\n");
@@ -77,9 +77,9 @@ void JVKEngine::init() {
 
 void JVKEngine::cleanup() {
     if (isInitialized_) {
-        vkDeviceWaitIdle(context_.device);
+        vkDeviceWaitIdle(ctx_.device);
 
-        loadedScenes.clear();
+        loadedScenes_.clear();
 
         // Frame data
         for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
@@ -92,54 +92,54 @@ void JVKEngine::cleanup() {
 
             frames_[i].deletionQueue.flush();
 
-            frames_[i].frameDescriptors.destroyPools(context_.device);
+            frames_[i].frameDescriptors.destroyPools(ctx_.device);
         }
 
         // Textures
         defaultSamplerLinear_.destroy();
-        defaultSamplerLinear_.destroy();
+        defaultSamplerNearest_.destroy();
 
-        errorCheckerboardImage_.destroy(context_, allocator_);
-        blackImage_.destroy(context_, allocator_);
-        whiteImage_.destroy(context_, allocator_);
+        errorCheckerboardImage_.destroy(ctx_, allocator_);
+        blackImage_.destroy(ctx_, allocator_);
+        whiteImage_.destroy(ctx_, allocator_);
 
         // Default data
-        _metallicRoughnessMaterial.clearResources(context_.device);
-        destroyBuffer(_matConstants);
+        metallicRoughnessMaterial_.clearResources(ctx_.device);
+        destroyBuffer(matConstants_);
 
         // ImGui
         ImGui_ImplVulkan_Shutdown();
-        vkDestroyDescriptorPool(context_.device, _imguiPool, nullptr);
+        vkDestroyDescriptorPool(ctx_.device, imguiPool_, nullptr);
 
         // Immediate command pool
         immBuffer_.destroy();
 
         // PIPELINES
-        vkDestroyPipelineLayout(context_.device, _gradientPipelineLayout, nullptr);
-        vkDestroyPipeline(context_.device, computeEffects[0].pipeline, nullptr);
-        vkDestroyPipeline(context_.device, computeEffects[1].pipeline, nullptr);
+        vkDestroyPipelineLayout(ctx_.device, computePipelineLayout_, nullptr);
+        vkDestroyPipeline(ctx_.device, computeEffects_[0].pipeline, nullptr);
+        vkDestroyPipeline(ctx_.device, computeEffects_[1].pipeline, nullptr);
 
         // Descriptors
-        _globalDescriptorAllocator.destroyPools(context_.device);
-        vkDestroyDescriptorSetLayout(context_.device, _drawImageDescriptorLayout, nullptr);
-        vkDestroyDescriptorSetLayout(context_.device, _gpuSceneDataDescriptorLayout, nullptr);
-        vkDestroyDescriptorSetLayout(context_.device, _singleImageDescriptorLayout, nullptr);
+        globalDescriptorAllocator_.destroyPools(ctx_.device);
+        vkDestroyDescriptorSetLayout(ctx_.device, drawImageDescriptorLayout_, nullptr);
+        vkDestroyDescriptorSetLayout(ctx_.device, gpuSceneDataDescriptorLayout_, nullptr);
+        vkDestroyDescriptorSetLayout(ctx_.device, singleImageDescriptorLayout_, nullptr);
 
         // Depth image
-        _depthImage.destroy(context_, allocator_);
+        depthImage_.destroy(ctx_, allocator_);
 
         // Draw image
-        _drawImage.destroy(context_, allocator_);
+        drawImage_.destroy(ctx_, allocator_);
 
         // VMA
         vmaDestroyAllocator(allocator_);
 
         // Swapchain
-        swapchain_.destroy(context_);
+        swapchain_.destroy(ctx_);
 
         // API
-        context_.destroy();
-        SDL_DestroyWindow(_window);
+        ctx_.destroy();
+        SDL_DestroyWindow(window_);
     }
 
     loadedEngine = nullptr;
@@ -149,15 +149,15 @@ void JVKEngine::draw() {
     updateScene();
     // Wait and reset render fence
     VK_CHECK(getCurrentFrame().renderFence.wait());
-    getCurrentFrame().frameDescriptors.clearPools(context_.device);
+    getCurrentFrame().frameDescriptors.clearPools(ctx_.device);
 
     VK_CHECK(getCurrentFrame().renderFence.reset());
 
     // Request an image from swapchain
     uint32_t swapchainImageIndex;
-    VkResult e = swapchain_.acquireNextImage(context_, getCurrentFrame().swapchainSemaphore, &swapchainImageIndex);
+    VkResult e = swapchain_.acquireNextImage(ctx_, getCurrentFrame().swapchainSemaphore, &swapchainImageIndex);
     if (e == VK_ERROR_OUT_OF_DATE_KHR) {
-        _resizeRequested = true;
+        resizeRequested_ = true;
         return;
     }
 
@@ -165,41 +165,41 @@ void JVKEngine::draw() {
     auto cmd = getCurrentFrame().cmdBuffer;
     VK_CHECK(cmd.reset());
 
-    _drawExtent.width  = std::min(swapchain_.extent.width, _drawImage.imageExtent.width) * renderScale;
-    _drawExtent.height = std::min(swapchain_.extent.height, _drawImage.imageExtent.height) * renderScale;
+    drawExtent_.width  = std::min(swapchain_.extent.width, drawImage_.imageExtent.width) * renderScale_;
+    drawExtent_.height = std::min(swapchain_.extent.height, drawImage_.imageExtent.height) * renderScale_;
 
     // Start the command buffer
     VK_CHECK(cmd.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT));
 
     // Transition draw image to general
-    VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    VkUtil::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-    ComputeEffect &effect = computeEffects[currentComputeEffect];
+    ComputeEffect &effect = computeEffects_[currentComputeEffect_];
 
     // Bind compute pipeline & descriptors
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, effect.pipeline);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout_, 0, 1, &drawImageDescriptors_, 0, nullptr);
 
     // Push constants for compute
-    vkCmdPushConstants(cmd, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
+    vkCmdPushConstants(cmd, computePipelineLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
 
     // Draw compute
-    vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0f), std::ceil(_drawExtent.height / 16.0f), 1);
+    vkCmdDispatch(cmd, std::ceil(drawExtent_.width / 16.0f), std::ceil(drawExtent_.height / 16.0f), 1);
 
     // Transition draw/depth images for render pass
-    VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    VkUtil::transitionImage(cmd, _depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    VkUtil::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkUtil::transitionImage(cmd, depthImage_.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
     drawGeometry(cmd);
 
     // Transition draw image to transfer source
-    VkUtil::transitionImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    VkUtil::transitionImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     // Transition swapchain image to transfer destination
     VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     // Copy image to from draw image to swapchain
-    VkUtil::copyImageToImage(cmd, _drawImage.image, swapchain_.images[swapchainImageIndex], _drawExtent, swapchain_.extent);
+    VkUtil::copyImageToImage(cmd, drawImage_.image, swapchain_.images[swapchainImageIndex], drawExtent_, swapchain_.extent);
 
     // Transition swapchain to attachment optimal
     VkUtil::transitionImage(cmd, swapchain_.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -234,7 +234,7 @@ void JVKEngine::draw() {
 
     VkResult presentResult = vkQueuePresentKHR(graphicsQueue_, &presentInfo);
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
-        _resizeRequested = true;
+        resizeRequested_ = true;
     }
 
     frameNumber_++;
@@ -268,7 +268,7 @@ void JVKEngine::run() {
             }
 
             if (SDL_GetRelativeMouseMode() == SDL_TRUE && !ImGui::GetIO().WantCaptureMouse) {
-                _mainCamera.processSDLEvent(e);
+                mainCamera_.processSDLEvent(e);
             }
             ImGui_ImplSDL2_ProcessEvent(&e);
         }
@@ -278,7 +278,7 @@ void JVKEngine::run() {
             continue;
         }
 
-        if (_resizeRequested) {
+        if (resizeRequested_) {
             resizeSwapchain();
         }
 
@@ -289,27 +289,27 @@ void JVKEngine::run() {
 
         ImGui::Begin("Stats");
 
-        ImGui::Text("Frame time %f ms", _stats.frameTime);
-        ImGui::Text("Draw time %d ms", _stats.meshDrawTime);
-        ImGui::Text("Update time %d ms", _stats.sceneUpdateTime);
-        ImGui::Text("Triangles %i", _stats.triangleCount);
-        ImGui::Text("Draws %i", _stats.drawCallCount);
+        ImGui::Text("Frame time %f ms", stats_.frameTime);
+        ImGui::Text("Draw time %d ms", stats_.meshDrawTime);
+        ImGui::Text("Update time %d ms", stats_.sceneUpdateTime);
+        ImGui::Text("Triangles %i", stats_.triangleCount);
+        ImGui::Text("Draws %i", stats_.drawCallCount);
         ImGui::End();
 
         if (ImGui::Begin("Camera")) {
-            ImGui::SliderFloat("Speed", &_mainCamera.speed, 0.0f, 1000.0f);
+            ImGui::SliderFloat("Speed", &mainCamera_.speed, 0.0f, 1000.0f);
         }
         ImGui::End();
 
         if (ImGui::Begin("computeEffects")) {
 
-            ImGui::SliderFloat("Render Scale", &renderScale, 0.3f, 1.0f);
+            ImGui::SliderFloat("Render Scale", &renderScale_, 0.3f, 1.0f);
 
-            ComputeEffect &selected = computeEffects[currentComputeEffect];
+            ComputeEffect &selected = computeEffects_[currentComputeEffect_];
 
             ImGui::Text("Selected effect: ", selected.name);
 
-            ImGui::SliderInt("Effect Index", &currentComputeEffect, 0, computeEffects.size() - 1);
+            ImGui::SliderInt("Effect Index", &currentComputeEffect_, 0, computeEffects_.size() - 1);
 
             ImGui::InputFloat4("data1", reinterpret_cast<float *>(&selected.data.data1));
             ImGui::InputFloat4("data2", reinterpret_cast<float *>(&selected.data.data2));
@@ -324,8 +324,8 @@ void JVKEngine::run() {
 
         auto end         = std::chrono::system_clock::now();
         auto elapsed     = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-        _stats.frameTime = elapsed.count() / 1000.0f;
-        deltaTime_       = _stats.frameTime / 1000.0f;
+        stats_.frameTime = elapsed.count() / 1000.0f;
+        deltaTime_       = stats_.frameTime / 1000.0f;
     }
 }
 
@@ -345,11 +345,11 @@ void JVKEngine::initVulkan() {
 
     vkb::Instance vkbInstance = vkbInstanceResult.value();
 
-    context_.instance       = vkbInstance.instance;
-    context_.debugMessenger = vkbInstance.debug_messenger;
+    ctx_.instance       = vkbInstance.instance;
+    ctx_.debugMessenger = vkbInstance.debug_messenger;
 
     // CREATE SURFACE
-    SDL_Vulkan_CreateSurface(_window, context_, &context_.surface);
+    SDL_Vulkan_CreateSurface(window_, ctx_, &ctx_.surface);
 
     // 1.3 FEATURES
     VkPhysicalDeviceVulkan13Features features13{};
@@ -367,7 +367,7 @@ void JVKEngine::initVulkan() {
     auto vkbPhysicalDeviceResult = physicalDeviceBuilder.set_minimum_version(1, 3)
                                            .set_required_features_13(features13)
                                            .set_required_features_12(features12)
-                                           .set_surface(context_)
+                                           .set_surface(ctx_)
                                            .select();
 
     if (!vkbPhysicalDeviceResult) {
@@ -380,8 +380,8 @@ void JVKEngine::initVulkan() {
     // DEVICE
     vkb::DeviceBuilder deviceBuilder{vkbPhysicalDevice};
     vkb::Device vkbDevice   = deviceBuilder.build().value();
-    context_.device         = vkbDevice.device;
-    context_.physicalDevice = vkbPhysicalDevice.physical_device;
+    ctx_.device         = vkbDevice.device;
+    ctx_.physicalDevice = vkbPhysicalDevice.physical_device;
 
     // QUEUE
     graphicsQueue_.queue  = vkbDevice.get_queue(vkb::QueueType::graphics).value();
@@ -389,18 +389,18 @@ void JVKEngine::initVulkan() {
 
     // VMA
     VmaAllocatorCreateInfo allocatorInfo = {};
-    allocatorInfo.physicalDevice         = context_.physicalDevice;
-    allocatorInfo.device                 = context_.device;
-    allocatorInfo.instance               = context_.instance;
+    allocatorInfo.physicalDevice         = ctx_.physicalDevice;
+    allocatorInfo.device                 = ctx_.device;
+    allocatorInfo.instance               = ctx_.instance;
     allocatorInfo.flags                  = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
     vmaCreateAllocator(&allocatorInfo, &allocator_);
 
     // MSAA
-    _maxMsaaSamples = getMaxUsableSampleCount();
+    maxMsaaSamples_ = getMaxUsableSampleCount();
 }
 
 void JVKEngine::initSwapchain() {
-    swapchain_.init(context_, windowExtent_.width, windowExtent_.height);
+    swapchain_.init(ctx_, windowExtent_.width, windowExtent_.height);
 }
 
 void JVKEngine::initCommands() {
@@ -410,19 +410,19 @@ void JVKEngine::initCommands() {
 
     // COMMAND BUFFERS
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-        VK_CHECK(frames_[i].cmdPool.init(context_, graphicsQueue_.family, flags));
+        VK_CHECK(frames_[i].cmdPool.init(ctx_, graphicsQueue_.family, flags));
         VK_CHECK(frames_[i].cmdPool.allocateCommandBuffer(&frames_[i].cmdBuffer));
     }
 
     // IMMEDIATE BUFFERS
-    VK_CHECK(immBuffer_.init(context_, graphicsQueue_.family, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    VK_CHECK(immBuffer_.init(ctx_, graphicsQueue_.family, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 }
 
 void JVKEngine::initSyncStructures() {
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
-        VK_CHECK(frames_[i].renderFence.init(context_, VK_FENCE_CREATE_SIGNALED_BIT));
-        VK_CHECK(frames_[i].swapchainSemaphore.init(context_));
-        VK_CHECK(frames_[i].renderSemaphore.init(context_));
+        VK_CHECK(frames_[i].renderFence.init(ctx_, VK_FENCE_CREATE_SIGNALED_BIT));
+        VK_CHECK(frames_[i].swapchainSemaphore.init(ctx_));
+        VK_CHECK(frames_[i].renderSemaphore.init(ctx_));
     }
 }
 
@@ -433,7 +433,7 @@ void JVKEngine::drawBackground(VkCommandBuffer cmd) const {
 
     VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
 
-    vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+    vkCmdClearColorImage(cmd, drawImage_.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
 }
 
 void JVKEngine::initDescriptors() {
@@ -443,23 +443,23 @@ void JVKEngine::initDescriptors() {
                     {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
                     {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}};
 
-    _globalDescriptorAllocator.init(context_.device, 10, sizes);
+    globalDescriptorAllocator_.init(ctx_.device, 10, sizes);
 
     // DRAW IMAGE
     // Layout
     {
         jvk::DescriptorLayoutBuilder builder;
         builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        _drawImageDescriptorLayout = builder.build(context_.device, VK_SHADER_STAGE_COMPUTE_BIT);
+        drawImageDescriptorLayout_ = builder.build(ctx_.device, VK_SHADER_STAGE_COMPUTE_BIT);
     }
 
     // Allocate set
-    _drawImageDescriptors = _globalDescriptorAllocator.allocate(context_.device, _drawImageDescriptorLayout);
+    drawImageDescriptors_ = globalDescriptorAllocator_.allocate(ctx_.device, drawImageDescriptorLayout_);
 
     // Write to set
     jvk::DescriptorWriter writer;
-    writer.writeImage(0, _drawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-    writer.updateSet(context_.device, _drawImageDescriptors);
+    writer.writeImage(0, drawImage_.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+    writer.updateSet(ctx_.device, drawImageDescriptors_);
 
     // FRAME DESCRIPTORS
     for (int i = 0; i < JVK_NUM_FRAMES; ++i) {
@@ -471,27 +471,27 @@ void JVKEngine::initDescriptors() {
         };
 
         frames_[i].frameDescriptors = jvk::DynamicDescriptorAllocator();
-        frames_[i].frameDescriptors.init(context_.device, 1000, frameSizes);
+        frames_[i].frameDescriptors.init(ctx_.device, 1000, frameSizes);
     }
 
     // GPU SCENE DATA
     {
         jvk::DescriptorLayoutBuilder builder;
         builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-        _gpuSceneDataDescriptorLayout = builder.build(context_.device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+        gpuSceneDataDescriptorLayout_ = builder.build(ctx_.device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     }
 
     // TEXTURES
     {
         jvk::DescriptorLayoutBuilder builder;
         builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        _singleImageDescriptorLayout = builder.build(context_.device, VK_SHADER_STAGE_FRAGMENT_BIT);
+        singleImageDescriptorLayout_ = builder.build(ctx_.device, VK_SHADER_STAGE_FRAGMENT_BIT);
     }
 }
 
 void JVKEngine::initPipelines() {
     initBackgroundPipelines();
-    _metallicRoughnessMaterial.buildPipelines(this);
+    metallicRoughnessMaterial_.buildPipelines(this);
 }
 
 void JVKEngine::initBackgroundPipelines() {
@@ -505,20 +505,20 @@ void JVKEngine::initBackgroundPipelines() {
     VkPipelineLayoutCreateInfo layout{};
     layout.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layout.pNext                  = nullptr;
-    layout.pSetLayouts            = &_drawImageDescriptorLayout;
+    layout.pSetLayouts            = &drawImageDescriptorLayout_;
     layout.setLayoutCount         = 1;
     layout.pPushConstantRanges    = &pushConstant;
     layout.pushConstantRangeCount = 1;
-    VK_CHECK(vkCreatePipelineLayout(context_.device, &layout, nullptr, &_gradientPipelineLayout));
+    VK_CHECK(vkCreatePipelineLayout(ctx_.device, &layout, nullptr, &computePipelineLayout_));
 
     // PIPELINE STAGES (AND SHADERS)
     VkShaderModule gradientShader;
-    if (!VkUtil::loadShaderModule("../shaders/gradient_pc.comp.spv", context_.device, &gradientShader)) {
+    if (!VkUtil::loadShaderModule("../shaders/gradient_pc.comp.spv", ctx_.device, &gradientShader)) {
         fmt::print("Error when building gradient compute shader \n");
     }
 
     VkShaderModule skyShader;
-    if (!VkUtil::loadShaderModule("../shaders/sky.comp.spv", context_.device, &skyShader)) {
+    if (!VkUtil::loadShaderModule("../shaders/sky.comp.spv", ctx_.device, &skyShader)) {
         fmt::println("Error when building sky compute shader");
     }
 
@@ -533,33 +533,33 @@ void JVKEngine::initBackgroundPipelines() {
     VkComputePipelineCreateInfo computeInfo{};
     computeInfo.sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     computeInfo.pNext  = nullptr;
-    computeInfo.layout = _gradientPipelineLayout;
+    computeInfo.layout = computePipelineLayout_;
     computeInfo.stage  = stageInfo;
 
     ComputeEffect gradient;
-    gradient.layout     = _gradientPipelineLayout;
+    gradient.layout     = computePipelineLayout_;
     gradient.name       = "gradient";
     gradient.data       = {};
     gradient.data.data1 = glm::vec4(1, 0, 0, 1);
     gradient.data.data2 = glm::vec4(0, 0, 1, 1);
 
-    VK_CHECK(vkCreateComputePipelines(context_.device, VK_NULL_HANDLE, 1, &computeInfo, nullptr, &gradient.pipeline));
+    VK_CHECK(vkCreateComputePipelines(ctx_.device, VK_NULL_HANDLE, 1, &computeInfo, nullptr, &gradient.pipeline));
 
     // CREATE SKY PIPELINE
     computeInfo.stage.module = skyShader;
 
     ComputeEffect sky;
-    sky.layout     = _gradientPipelineLayout;
+    sky.layout     = computePipelineLayout_;
     sky.name       = "sky";
     sky.data       = {};
     sky.data.data1 = glm::vec4(0.1, 0.2, 0.4, 0.97);
-    VK_CHECK(vkCreateComputePipelines(context_.device, VK_NULL_HANDLE, 1, &computeInfo, nullptr, &sky.pipeline));
+    VK_CHECK(vkCreateComputePipelines(ctx_.device, VK_NULL_HANDLE, 1, &computeInfo, nullptr, &sky.pipeline));
 
-    computeEffects.push_back(gradient);
-    computeEffects.push_back(sky);
+    computeEffects_.push_back(gradient);
+    computeEffects_.push_back(sky);
 
-    vkDestroyShaderModule(context_.device, gradientShader, nullptr);
-    vkDestroyShaderModule(context_.device, skyShader, nullptr);
+    vkDestroyShaderModule(ctx_.device, gradientShader, nullptr);
+    vkDestroyShaderModule(ctx_.device, skyShader, nullptr);
 }
 
 void JVKEngine::initImgui() {
@@ -582,17 +582,17 @@ void JVKEngine::initImgui() {
     poolInfo.poolSizeCount = static_cast<uint32_t>(std::size(poolSizes));
     poolInfo.pPoolSizes    = poolSizes;
 
-    VK_CHECK(vkCreateDescriptorPool(context_.device, &poolInfo, nullptr, &_imguiPool));
+    VK_CHECK(vkCreateDescriptorPool(ctx_.device, &poolInfo, nullptr, &imguiPool_));
 
     ImGui::CreateContext();
-    ImGui_ImplSDL2_InitForVulkan(_window);
+    ImGui_ImplSDL2_InitForVulkan(window_);
 
     ImGui_ImplVulkan_InitInfo initInfo{};
-    initInfo.Instance            = context_;
-    initInfo.PhysicalDevice      = context_;
-    initInfo.Device              = context_;
+    initInfo.Instance            = ctx_;
+    initInfo.PhysicalDevice      = ctx_;
+    initInfo.Device              = ctx_;
     initInfo.Queue               = graphicsQueue_;
-    initInfo.DescriptorPool      = _imguiPool;
+    initInfo.DescriptorPool      = imguiPool_;
     initInfo.MinImageCount       = 3;
     initInfo.ImageCount          = 3;
     initInfo.UseDynamicRendering = true;
@@ -619,20 +619,20 @@ void JVKEngine::drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) cons
 }
 
 void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
-    _stats.drawCallCount = 0;
-    _stats.triangleCount = 0;
+    stats_.drawCallCount = 0;
+    stats_.triangleCount = 0;
     auto start           = std::chrono::system_clock::now();
 
     // SORT DRAWS
     std::vector<uint32_t> opaqueDraws;
-    opaqueDraws.reserve(_mainDrawContext.opaqueSurfaces.size());
-    for (uint32_t i = 0; i < _mainDrawContext.opaqueSurfaces.size(); ++i) {
+    opaqueDraws.reserve(drawCtx_.opaqueSurfaces.size());
+    for (uint32_t i = 0; i < drawCtx_.opaqueSurfaces.size(); ++i) {
         opaqueDraws.push_back(i);
     }
 
     std::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const auto &iA, const auto &iB) {
-        const RenderObject &A = _mainDrawContext.opaqueSurfaces[iA];
-        const RenderObject &B = _mainDrawContext.opaqueSurfaces[iB];
+        const RenderObject &A = drawCtx_.opaqueSurfaces[iA];
+        const RenderObject &B = drawCtx_.opaqueSurfaces[iB];
 
         if (A.material == B.material) {
             return A.indexBuffer < B.indexBuffer;
@@ -641,9 +641,9 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     });
 
     // SETUP RENDER PASS
-    VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    VkRenderingAttachmentInfo depthAttachment = VkInit::depthRenderingAttachment(_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-    VkRenderingInfo renderingInfo             = VkInit::rendering(_drawExtent, &colorAttachment, &depthAttachment);
+    VkRenderingAttachmentInfo colorAttachment = VkInit::renderingAttachment(drawImage_.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkRenderingAttachmentInfo depthAttachment = VkInit::depthRenderingAttachment(depthImage_.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    VkRenderingInfo renderingInfo             = VkInit::rendering(drawExtent_, &colorAttachment, &depthAttachment);
 
     // BEGIN RENDER PASS
     vkCmdBeginRendering(cmd, &renderingInfo);
@@ -652,12 +652,12 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
     // Contains global scene data (projection matrices, light, etc)
     AllocatedBuffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     GPUSceneData *sceneUniformData     = static_cast<GPUSceneData *>(gpuSceneDataBuffer.allocation->GetMappedData());
-    *sceneUniformData                  = sceneData;
+    *sceneUniformData                  = sceneData_;
 
-    VkDescriptorSet globalDescriptor = getCurrentFrame().frameDescriptors.allocate(context_.device, _gpuSceneDataDescriptorLayout);
+    VkDescriptorSet globalDescriptor = getCurrentFrame().frameDescriptors.allocate(ctx_.device, gpuSceneDataDescriptorLayout_);
     jvk::DescriptorWriter writer;
     writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    writer.updateSet(context_.device, globalDescriptor);
+    writer.updateSet(ctx_.device, globalDescriptor);
 
     getCurrentFrame().deletionQueue.push([=, this]() {
         destroyBuffer(gpuSceneDataBuffer);
@@ -681,8 +681,8 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
                 VkViewport viewport{};
                 viewport.x        = 0;
                 viewport.y        = 0;
-                viewport.width    = _drawExtent.width;
-                viewport.height   = _drawExtent.height;
+                viewport.width    = drawExtent_.width;
+                viewport.height   = drawExtent_.height;
                 viewport.minDepth = 0.0f;
                 viewport.maxDepth = 1.0f;
                 vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -691,8 +691,8 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
                 VkRect2D scissor{};
                 scissor.offset.x      = 0;
                 scissor.offset.y      = 0;
-                scissor.extent.width  = _drawExtent.width;
-                scissor.extent.height = _drawExtent.height;
+                scissor.extent.width  = drawExtent_.width;
+                scissor.extent.height = drawExtent_.height;
                 vkCmdSetScissor(cmd, 0, 1, &scissor);
             }
 
@@ -715,15 +715,15 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
         // Draw
         vkCmdDrawIndexed(cmd, r.indexCount, 1, r.firstIndex, 0, 0);
 
-        _stats.drawCallCount++;
-        _stats.triangleCount += r.indexCount / 3;
+        stats_.drawCallCount++;
+        stats_.triangleCount += r.indexCount / 3;
     };
 
     for (const auto &r: opaqueDraws) {
-        draw(_mainDrawContext.opaqueSurfaces[r]);
+        draw(drawCtx_.opaqueSurfaces[r]);
     }
 
-    for (const RenderObject &r: _mainDrawContext.transparentSurfaces) {
+    for (const RenderObject &r: drawCtx_.transparentSurfaces) {
         draw(r);
     }
 
@@ -731,7 +731,7 @@ void JVKEngine::drawGeometry(VkCommandBuffer cmd) {
 
     auto end            = std::chrono::system_clock::now();
     auto elapsed        = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    _stats.meshDrawTime = elapsed.count() / 1000.0f;
+    stats_.meshDrawTime = elapsed.count() / 1000.0f;
 }
 
 AllocatedBuffer JVKEngine::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const {
@@ -768,7 +768,7 @@ GPUMeshBuffers JVKEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vert
     VkBufferDeviceAddressInfo deviceAddressInfo{};
     deviceAddressInfo.sType     = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     deviceAddressInfo.buffer    = surface.vertexBuffer.buffer;
-    surface.vertexBufferAddress = vkGetBufferDeviceAddress(context_.device, &deviceAddressInfo);
+    surface.vertexBufferAddress = vkGetBufferDeviceAddress(ctx_.device, &deviceAddressInfo);
 
     // Index buffer
     surface.indexBuffer = createBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
@@ -823,8 +823,8 @@ void JVKEngine::initDefaultData() {
     errorCheckerboardImage_ = createImage(pixels.data(), VkExtent3D{16, 16, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     // SAMPLERS
-    VK_CHECK(defaultSamplerNearest_.init(context_, VK_FILTER_NEAREST, VK_FILTER_NEAREST));
-    VK_CHECK(defaultSamplerLinear_.init(context_, VK_FILTER_LINEAR, VK_FILTER_LINEAR));
+    VK_CHECK(defaultSamplerNearest_.init(ctx_, VK_FILTER_NEAREST, VK_FILTER_NEAREST));
+    VK_CHECK(defaultSamplerLinear_.init(ctx_, VK_FILTER_LINEAR, VK_FILTER_LINEAR));
 
     // MATERIALS
     GLTFMetallicRoughness::MaterialResources matResources;
@@ -833,28 +833,28 @@ void JVKEngine::initDefaultData() {
     matResources.metallicRoughnessImage   = whiteImage_;
     matResources.metallicRoughnessSampler = defaultSamplerLinear_;
 
-    _matConstants                                              = createBuffer(sizeof(GLTFMetallicRoughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-    GLTFMetallicRoughness::MaterialConstants *sceneUniformData = static_cast<GLTFMetallicRoughness::MaterialConstants *>(_matConstants.allocation->GetMappedData());
+    matConstants_                                              = createBuffer(sizeof(GLTFMetallicRoughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    GLTFMetallicRoughness::MaterialConstants *sceneUniformData = static_cast<GLTFMetallicRoughness::MaterialConstants *>(matConstants_.allocation->GetMappedData());
     sceneUniformData->colorFactors                             = glm::vec4{1, 1, 1, 1};
     sceneUniformData->metallicRoughnessFactors                 = glm::vec4{1, 0.5, 0, 0};
 
-    matResources.dataBuffer       = _matConstants.buffer;
+    matResources.dataBuffer       = matConstants_.buffer;
     matResources.dataBufferOffset = 0;
 
-    _defaultMaterialData = _metallicRoughnessMaterial.writeMaterial(context_.device, MaterialPass::MAIN_COLOR, matResources, _globalDescriptorAllocator);
+    defaultMaterialData_ = metallicRoughnessMaterial_.writeMaterial(ctx_.device, MaterialPass::MAIN_COLOR, matResources, globalDescriptorAllocator_);
 }
 
 void JVKEngine::resizeSwapchain() {
-    vkDeviceWaitIdle(context_);
-    swapchain_.destroy(context_);
+    vkDeviceWaitIdle(ctx_);
+    swapchain_.destroy(ctx_);
 
     int w, h;
-    SDL_GetWindowSize(_window, &w, &h);
+    SDL_GetWindowSize(window_, &w, &h);
     windowExtent_.width  = w;
     windowExtent_.height = h;
 
-    swapchain_.init(context_, windowExtent_.width, windowExtent_.height);
-    _resizeRequested = false;
+    swapchain_.init(ctx_, windowExtent_.width, windowExtent_.height);
+    resizeRequested_ = false;
 }
 
 jvk::Image JVKEngine::createImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped, const VkSampleCountFlagBits sampleCount) const {
@@ -882,7 +882,7 @@ jvk::Image JVKEngine::createImage(const VkExtent3D size, const VkFormat format, 
     // IMAGE VIEW
     VkImageViewCreateInfo viewInfo       = VkInit::imageView(format, image.image, aspectFlag);
     viewInfo.subresourceRange.levelCount = imageInfo.mipLevels;
-    VK_CHECK(vkCreateImageView(context_.device, &viewInfo, nullptr, &image.imageView));
+    VK_CHECK(vkCreateImageView(ctx_.device, &viewInfo, nullptr, &image.imageView));
 
     return image;
 }
@@ -930,30 +930,30 @@ jvk::Image JVKEngine::createImage(void *data, VkExtent3D size, VkFormat format, 
 void JVKEngine::updateScene() {
     auto start = std::chrono::system_clock::now();
 
-    _mainCamera.update(deltaTime_);
-    glm::mat4 view = _mainCamera.getViewMatrix();
+    mainCamera_.update(deltaTime_);
+    glm::mat4 view = mainCamera_.getViewMatrix();
     glm::mat4 proj = glm::perspective(glm::radians(70.f), static_cast<float>(windowExtent_.width) / static_cast<float>(windowExtent_.height), 0.1f, 10000.0f);
     proj[1][1] *= -1;
 
-    _mainDrawContext.opaqueSurfaces.clear();
-    _mainDrawContext.transparentSurfaces.clear();
-    loadedScenes["base_scene"]->draw(glm::mat4(1.0f), _mainDrawContext);
+    drawCtx_.opaqueSurfaces.clear();
+    drawCtx_.transparentSurfaces.clear();
+    loadedScenes_["base_scene"]->draw(glm::mat4(1.0f), drawCtx_);
 
-    sceneData.view              = view;
-    sceneData.proj              = proj;
-    sceneData.viewProj          = sceneData.proj * sceneData.view;
-    sceneData.ambientColor      = glm::vec4(0.1f);
-    sceneData.sunlightColor     = glm::vec4(1.0f);
-    sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.0f);
+    sceneData_.view              = view;
+    sceneData_.proj              = proj;
+    sceneData_.viewProj          = sceneData_.proj * sceneData_.view;
+    sceneData_.ambientColor      = glm::vec4(0.1f);
+    sceneData_.sunlightColor     = glm::vec4(1.0f);
+    sceneData_.sunlightDirection = glm::vec4(0, 1, 0.5, 1.0f);
 
     auto end               = std::chrono::system_clock::now();
     auto elapsed           = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    _stats.sceneUpdateTime = elapsed.count() / 1000.0f;
+    stats_.sceneUpdateTime = elapsed.count() / 1000.0f;
 }
 
 VkSampleCountFlagBits JVKEngine::getMaxUsableSampleCount() {
     VkPhysicalDeviceProperties props;
-    vkGetPhysicalDeviceProperties(context_, &props);
+    vkGetPhysicalDeviceProperties(ctx_, &props);
 
     VkSampleCountFlags counts = props.limits.framebufferColorSampleCounts & props.limits.framebufferDepthSampleCounts;
     if (counts & VK_SAMPLE_COUNT_64_BIT) return VK_SAMPLE_COUNT_64_BIT;
@@ -971,8 +971,8 @@ void JVKEngine::initDrawImages() {
             windowExtent_.height,
             1};
 
-    _drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;// 16-bit float image
-    _drawImage.imageExtent = drawImageExtent;
+    drawImage_.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;// 16-bit float image
+    drawImage_.imageExtent = drawImageExtent;
 
     VkImageUsageFlags drawImageUsages = {};
     drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // Copy from image
@@ -980,7 +980,7 @@ void JVKEngine::initDrawImages() {
     drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;         // Allow compute shader to write
     drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;// Graphics pipeline
 
-    VkImageCreateInfo drawImageInfo = VkInit::image(_drawImage.imageFormat, drawImageUsages, drawImageExtent);
+    VkImageCreateInfo drawImageInfo = VkInit::image(drawImage_.imageFormat, drawImageUsages, drawImageExtent);
 
     // VMA_MEMORY_USAGE_GPU_ONLY: the texture will never be accessed from the CPU
     // VK_MEMORY_PROPERTYcontext_.device_LOCAL_BIT: GPU exclusive memory flag, guarantees that the memory is on the GPU
@@ -988,23 +988,23 @@ void JVKEngine::initDrawImages() {
     drawImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
     drawImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    vmaCreateImage(allocator_, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
+    vmaCreateImage(allocator_, &drawImageInfo, &drawImageAllocInfo, &drawImage_.image, &drawImage_.allocation, nullptr);
 
-    VkImageViewCreateInfo imageViewInfo = VkInit::imageView(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
-    VK_CHECK(vkCreateImageView(context_.device, &imageViewInfo, nullptr, &_drawImage.imageView));
+    VkImageViewCreateInfo imageViewInfo = VkInit::imageView(drawImage_.imageFormat, drawImage_.image, VK_IMAGE_ASPECT_COLOR_BIT);
+    VK_CHECK(vkCreateImageView(ctx_.device, &imageViewInfo, nullptr, &drawImage_.imageView));
 
     // CREATE DEPTH IMAGE
-    _depthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
-    _depthImage.imageExtent = drawImageExtent;
+    depthImage_.imageFormat = VK_FORMAT_D32_SFLOAT;
+    depthImage_.imageExtent = drawImageExtent;
 
     VkImageUsageFlags depthImageUsages{};
     depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-    VkImageCreateInfo depthImageInfo = VkInit::image(_depthImage.imageFormat, depthImageUsages, drawImageExtent);
-    vmaCreateImage(allocator_, &depthImageInfo, &drawImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
+    VkImageCreateInfo depthImageInfo = VkInit::image(depthImage_.imageFormat, depthImageUsages, drawImageExtent);
+    vmaCreateImage(allocator_, &depthImageInfo, &drawImageAllocInfo, &depthImage_.image, &depthImage_.allocation, nullptr);
 
-    VkImageViewCreateInfo depthImageViewInfo = VkInit::imageView(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
-    VK_CHECK(vkCreateImageView(context_.device, &depthImageViewInfo, nullptr, &_depthImage.imageView));
+    VkImageViewCreateInfo depthImageViewInfo = VkInit::imageView(depthImage_.imageFormat, depthImage_.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+    VK_CHECK(vkCreateImageView(ctx_.device, &depthImageViewInfo, nullptr, &depthImage_.imageView));
 }
 
 void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {
@@ -1033,11 +1033,11 @@ void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {
 void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     // LOAD SHADERS
     VkShaderModule vertShader;
-    if (!VkUtil::loadShaderModule("../shaders/mesh.vert.spv", engine->context_.device, &vertShader)) {
+    if (!VkUtil::loadShaderModule("../shaders/mesh.vert.spv", engine->ctx_.device, &vertShader)) {
         fmt::print("Error when building vertex shader module");
     }
     VkShaderModule fragShader;
-    if (!VkUtil::loadShaderModule("../shaders/mesh.frag.spv", engine->context_.device, &fragShader)) {
+    if (!VkUtil::loadShaderModule("../shaders/mesh.frag.spv", engine->ctx_.device, &fragShader)) {
         fmt::print("Error when building fragment shader module");
     }
 
@@ -1052,9 +1052,9 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-    materialDescriptorLayout = builder.build(engine->context_.device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    materialDescriptorLayout = builder.build(engine->ctx_.device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     // _gpuSceneDataDescriptorLayout is used as our global descriptor layout
-    VkDescriptorSetLayout layouts[] = {engine->_gpuSceneDataDescriptorLayout, materialDescriptorLayout};
+    VkDescriptorSetLayout layouts[] = {engine->gpuSceneDataDescriptorLayout_, materialDescriptorLayout};
 
     // PIPELINE LAYOUT
     VkPipelineLayoutCreateInfo layoutInfo = VkInit::pipelineLayout();
@@ -1064,7 +1064,7 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     layoutInfo.pushConstantRangeCount     = 1;
 
     VkPipelineLayout layout;
-    VK_CHECK(vkCreatePipelineLayout(engine->context_.device, &layoutInfo, nullptr, &layout));
+    VK_CHECK(vkCreatePipelineLayout(engine->ctx_.device, &layoutInfo, nullptr, &layout));
 
     opaquePipeline.pipelineLayout      = layout;
     transparentPipeline.pipelineLayout = layout;
@@ -1078,19 +1078,19 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     pipelineBuilder.setMultiSamplingNone();
     pipelineBuilder.disableBlending();
     pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
-    pipelineBuilder.setColorAttachmentFormat(engine->_drawImage.imageFormat);
-    pipelineBuilder.setDepthAttachmentFormat(engine->_depthImage.imageFormat);
+    pipelineBuilder.setColorAttachmentFormat(engine->drawImage_.imageFormat);
+    pipelineBuilder.setDepthAttachmentFormat(engine->depthImage_.imageFormat);
     pipelineBuilder._pipelineLayout = layout;
 
-    opaquePipeline.pipeline = pipelineBuilder.buildPipeline(engine->context_.device);
+    opaquePipeline.pipeline = pipelineBuilder.buildPipeline(engine->ctx_.device);
 
     pipelineBuilder.enableBlendingAdditive();
     pipelineBuilder.enableDepthTest(false, VK_COMPARE_OP_LESS_OR_EQUAL);
 
-    transparentPipeline.pipeline = pipelineBuilder.buildPipeline(engine->context_.device);
+    transparentPipeline.pipeline = pipelineBuilder.buildPipeline(engine->ctx_.device);
 
-    vkDestroyShaderModule(engine->context_.device, vertShader, nullptr);
-    vkDestroyShaderModule(engine->context_.device, fragShader, nullptr);
+    vkDestroyShaderModule(engine->ctx_.device, vertShader, nullptr);
+    vkDestroyShaderModule(engine->ctx_.device, fragShader, nullptr);
 }
 
 MaterialInstance GLTFMetallicRoughness::writeMaterial(const VkDevice device, const MaterialPass pass, const MaterialResources &resources, jvk::DynamicDescriptorAllocator &descriptorAllocator) {
