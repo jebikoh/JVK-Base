@@ -291,7 +291,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
         vertices.clear();
 
         for (auto &&p: mesh.primitives) {
-            GeoSurface surface;
+            Surface surface;
             surface.startIndex   = static_cast<uint32_t>(indices.size());
             surface.count        = static_cast<uint32_t>(gltf.accessors[p.indicesAccessor.value()].count);
             size_t initialVertex = vertices.size();
