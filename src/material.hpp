@@ -25,10 +25,6 @@ struct MaterialInstance {
     MaterialPipeline *pipeline;
     VkDescriptorSet materialSet;
     MaterialPass passType;
-
-    void destroy(const VkDevice device, const bool destroyLayout = false) const {
-        pipeline->destroy(device);
-    }
 };
 
 struct GLTFMaterial {

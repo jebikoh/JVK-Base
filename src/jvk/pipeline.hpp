@@ -12,7 +12,7 @@ struct PipelineBuilder {
     VkPipelineRasterizationStateCreateInfo _rasterizer;        // Rasterization settings between vertex & frag shader
     VkPipelineColorBlendAttachmentState _colorBlendAttachment; // Color blending & attachment information (transparency)
     VkPipelineMultisampleStateCreateInfo _multisampling;       // MSAA
-    VkPipelineLayout _pipelineLayout;                          // Pipeline layout (desriptors, etc)
+    VkPipelineLayout _pipelineLayout;                          // Pipeline layout (descriptors, etc)
     VkPipelineDepthStencilStateCreateInfo _depthStencil;       // Depth-testing & stencil configuration
     VkPipelineRenderingCreateInfo _renderingInfo;              // Holds attachment info for pipeline, passed via pNext
     VkFormat _colorAttachmentFormat;

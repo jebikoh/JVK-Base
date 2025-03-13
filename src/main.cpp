@@ -1,6 +1,8 @@
-#include <jvk.hpp>
 #include <engine.hpp>
 #include <SDL.h>
+
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "UnusedParameter"
 
 int main(int argv, char **args) {
     JVKEngine engine;
@@ -11,3 +13,4 @@ int main(int argv, char **args) {
 
     return 0;
 }
+#pragma clang diagnostic pop

@@ -21,7 +21,7 @@ struct DescriptorLayoutBuilder {
     VkDescriptorSetLayout build(VkDevice device, VkShaderStageFlags shaderStages, void *pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 };
 
-struct DescriptorAllocator {
+struct [[maybe_unused]] DescriptorAllocator {
     struct PoolSizeRatio {
         VkDescriptorType type;
         float ratio;
