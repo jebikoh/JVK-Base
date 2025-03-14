@@ -250,9 +250,12 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(JVKEngine *engine, std::file
 
         // MATERIAL PASS
         MaterialPass passType = MaterialPass::MAIN_COLOR;
+
+#ifdef JVK_USE_GLTF_ALPHA_MODE
         if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
             passType = MaterialPass::TRANSPARENT;
         }
+#endif
 
         // MATERIAL RESOURCES
         GLTFMetallicRoughness::MaterialResources matResources;

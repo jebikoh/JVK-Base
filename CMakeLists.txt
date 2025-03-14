@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(Vulkan REQUIRED)
 
 option(JVK_ENABLE_PERF_FLAGS "Enable performance flags" OFF)
+option(JVK_USE_GLTF_ALPHA_MODE "Enable transparent pipeline" OFF)
 
 add_executable(JVK_Engine src/main.cpp
         src/jvk.hpp
@@ -46,6 +47,11 @@ if (JVK_ENABLE_PERF_FLAGS)
         message(WARNING "Unknown compiler. No optimization flags added.")
     endif ()
 endif ()
+
+if (JVK_USE_GLTF_ALPHA_MODE)
+    add_compile_definitions(-DJVK_USE_GLTF_ALPHA_MODE)
+endif ()
+
 
 add_subdirectory(include/vkbootstrap)
 add_subdirectory(include/vma)
