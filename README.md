@@ -7,8 +7,8 @@ This is my base Vulkan engine which I build my other projects on top of. It has 
 Since this engine is meant to be specialized per project, I likely won't be adding anymore features.
 
 This engine is currently being used in two of my other projects:
- - [JTX-PathTracer](https://github.com/jebikoh/jvk-pathtracer): an interactive C++ path tracer
- - Hybrid Rendering Engine (Not Published): a C++/CUDA hybrid rasterization/path tracing engine.
+ - [JTX-PathTracer](https://github.com/jebikoh/jvk-pathtracer): an interactive C++/CUDA path tracer
+ - Hybrid Rendering Engine (Not Published): a hybrid ray tracing/rasterization engine
 
 ## Dependencies
 
