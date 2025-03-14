@@ -8,6 +8,7 @@ find_package(Vulkan REQUIRED)
 option(JVK_ENABLE_PERF_FLAGS "Enable performance flags" OFF)
 option(JVK_USE_GLTF_ALPHA_MODE "Enable transparent pipeline" OFF)
 option(JVK_ENABLE_BACKFACE_CULLING "Enable backface culling" ON)
+option(JVK_LOADER_GENERATE_MIPMAPS "Generate mipmaps for textures" ON)
 
 add_executable(JVK_Engine src/main.cpp
         src/jvk.hpp
@@ -35,6 +36,8 @@ add_executable(JVK_Engine src/main.cpp
         src/jvk/util.hpp
         src/jvk/util.cpp
         src/jvk/buffer.hpp
+        src/jvk/shaders.hpp
+        src/material.cpp
 )
 
 if (JVK_ENABLE_PERF_FLAGS)
@@ -55,6 +58,10 @@ endif ()
 
 if (JVK_ENABLE_BACKFACE_CULLING)
     add_compile_definitions(-DJVK_ENABLE_BACKFACE_CULLING)
+endif ()
+
+if (JVK_LOADER_GENERATE_MIPMAPS)
+    add_compile_definitions(-DJVK_LOADER_GENERATE_MIPMAPS)
 endif ()
 
 add_subdirectory(include/vkbootstrap)

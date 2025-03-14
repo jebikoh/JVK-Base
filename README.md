@@ -42,6 +42,7 @@ The project is built with CMake. Here are the available build options:
  - `JVK_ENABLE_PERF_FLAGS`: will enable compiler specific optimization flags (e.g. `-o3`, `/O2`)
  - `JVK_USE_GLTF_ALPHA_MODE`: will enable the transparent material pass with alpha blending
  - `JKV_ENABLE_BACKFACE_CULLING`: will enable back-face culling; looking to get rid of this via dynamic state.
+ = `JVK_LOADER_GENERATE_MIPMAPS`: will generate mipmaps for textures
 
 ## References
 

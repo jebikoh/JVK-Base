@@ -14,7 +14,35 @@
 #include <stb_image.h>
 
 constexpr bool JVK_OVERRIDE_COLORS_WITH_NORMAL_MAP = false;
-constexpr bool JVK_LOADER_GENERATE_MIPMAPS = true;
+
+#ifdef JVK_LOADER_GENERATE_MIPMAPS
+constexpr bool JVK_GENERATE_MIPMAPS = true;
+#else
+constexpr bool JVK_GENERATE_MIPMAPS = false;
+#endif
+
+void MeshNode::draw(const glm::mat4 &topMatrix, DrawContext &ctx) {
+    glm::mat4 nodeMatrix = topMatrix * worldTransform;
+
+    for (auto &s: mesh->surfaces) {
+        RenderObject rObj;
+        rObj.indexCount  = s.count;
+        rObj.firstIndex  = s.startIndex;
+        rObj.indexBuffer = mesh->meshBuffers.indexBuffer.buffer;
+        rObj.material    = &s.material->data;
+
+        rObj.transform           = nodeMatrix;
+        rObj.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
+
+        if (rObj.material->passType == MaterialPass::TRANSPARENT) {
+            ctx.transparentSurfaces.push_back(rObj);
+        } else {
+            ctx.opaqueSurfaces.push_back(rObj);
+        }
+    }
+
+    Node::draw(topMatrix, ctx);
+}
 
 std::optional<jvk::Image> loadImage(JVKEngine *engine, fastgltf::Asset &asset, fastgltf::Image &image) {
     jvk::Image newImage{};
