@@ -4,8 +4,7 @@ This is my base Vulkan engine which I build my other projects on top of. It has 
 
 ![readme.png](readme.png)
 
-Since this engine is meant to be specialized per project, I likely won't be adding anymore features besides:
- - [ ] Optional MSAA
+Since this engine is meant to be specialized per project, I likely won't be adding anymore features.
 
 This engine is currently being used in two of my other projects:
  - [JTX-PathTracer](https://github.com/jebikoh/jvk-pathtracer): an interactive C++ path tracer
