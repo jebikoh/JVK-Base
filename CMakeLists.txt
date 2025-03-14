@@ -7,6 +7,7 @@ find_package(Vulkan REQUIRED)
 
 option(JVK_ENABLE_PERF_FLAGS "Enable performance flags" OFF)
 option(JVK_USE_GLTF_ALPHA_MODE "Enable transparent pipeline" OFF)
+option(JVK_ENABLE_BACKFACE_CULLING "Enable backface culling" ON)
 
 add_executable(JVK_Engine src/main.cpp
         src/jvk.hpp
@@ -52,6 +53,9 @@ if (JVK_USE_GLTF_ALPHA_MODE)
     add_compile_definitions(-DJVK_USE_GLTF_ALPHA_MODE)
 endif ()
 
+if (JVK_ENABLE_BACKFACE_CULLING)
+    add_compile_definitions(-DJVK_ENABLE_BACKFACE_CULLING)
+endif ()
 
 add_subdirectory(include/vkbootstrap)
 add_subdirectory(include/vma)

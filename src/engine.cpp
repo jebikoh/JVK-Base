@@ -1092,7 +1092,14 @@ void GLTFMetallicRoughness::buildPipelines(JVKEngine *engine) {
     pipelineBuilder.setShaders(vertShader, fragShader);
     pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+
+    // TODO: look into dynamic state
+#ifdef JVK_ENABLE_BACKFACE_CULLING
+    pipelineBuilder.setCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+#else
     pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+#endif
+
     pipelineBuilder.setMultiSamplingNone();
     pipelineBuilder.disableBlending();
     pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);

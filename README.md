@@ -1,13 +1,11 @@
 # JVK Engine Base
 
-This is my base Vulkan engine which I build my other projects on top of. It has very basic rasterization capabilities built with a thin wrapper around Vulkan 1.3 (`src/jvk`) and a simplified glTF 2.0 scene graph. The project is built with CMake and C++ 20. Note, this is/was a primarily learning project, so it does not follow a lof Vulkan best-practices. The list of resouces I used are in the references section at the bottom.
+This is my base Vulkan engine which I build my other projects on top of. It has very basic rasterization capabilities built with a thin wrapper around Vulkan 1.3 (`src/jvk`) and a simplified glTF 2.0 scene graph. The project is built with CMake and C++ 20. Note, this is/was a primarily learning project, so it does not follow a lof Vulkan best-practices. The list of resources I used are in the references section at the bottom.
 
 ![readme.png](readme.png)
 
 Since this engine is meant to be specialized per project, I likely won't be adding anymore features besides:
  - [ ] Optional MSAA
- - [ ] Optional Back-face culling
- - [ ] Optional Frustrum culling
 
 This engine is currently being used in two of my other projects:
  - [JTX-PathTracer](https://github.com/jebikoh/jvk-pathtracer): an interactive C++ path tracer
@@ -42,6 +40,8 @@ git submodule update --init --recursive
 
 The project is built with CMake. Here are the available build options:
  - `JVK_ENABLE_PERF_FLAGS`: will enable compiler specific optimization flags (e.g. `-o3`, `/O2`)
+ - `JVK_USE_GLTF_ALPHA_MODE`: will enable the transparent material pass with alpha blending
+ - `JKV_ENABLE_BACKFACE_CULLING`: will enable back-face culling; looking to get rid of this via dynamic state.
 
 ## References
 
