@@ -4,13 +4,7 @@ This is my base Vulkan engine which I build my other projects on top of. It has 
 
 ![readme.png](readme.png)
 
-The pending features that I plan on adding to this project are:
-- [ ] glTF 2.0 Metallic Roughness PBR
-- [ ] Basic lighting
-- [ ] Configurable MSAA
-- [ ] Configurable culling
-
-Since this engine is meant to be specialized per project, I likely won't be adding anymore features beyond the above. This engine is currently being used in two of my other projects:
+Since this engine is meant to be specialized per project, I likely won't be adding anymore features. This engine is currently being used in two of my other projects:
  - [JTX-PathTracer](https://github.com/jebikoh/jvk-pathtracer): an interactive C++ path tracer
  - Hybrid Rendering Engine (Not Published): a C++/CUDA hybrid rasterization/path tracing engine.
 
