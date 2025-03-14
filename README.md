@@ -5,7 +5,6 @@ This is my base Vulkan engine which I build my other projects on top of. It has 
 ![readme.png](readme.png)
 
 Since this engine is meant to be specialized per project, I likely won't be adding anymore features besides:
- - [ ] Improved basic material system
  - [ ] Optional MSAA
  - [ ] Optional Back-face culling
  - [ ] Optional Frustrum culling
