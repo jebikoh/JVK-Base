@@ -29,8 +29,8 @@ struct CommandBuffer {
         return vkResetCommandBuffer(cmd, flags);
     }
 
-    VkCommandBufferSubmitInfo submitInfo() const {
-        VkCommandBufferSubmitInfo info = {};
+    VkCommandBufferSubmitInfoKHR submitInfo() const {
+        VkCommandBufferSubmitInfoKHR info = {};
         info.sType                     = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
         info.pNext                     = nullptr;
         info.commandBuffer             = cmd;

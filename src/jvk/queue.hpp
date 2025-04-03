@@ -12,8 +12,8 @@ struct Queue {
 
     operator VkQueue() const { return queue; }
 
-    VkResult submit(VkCommandBufferSubmitInfo *cmdInfo, VkSemaphoreSubmitInfo *waitSemaphoreInfo, VkSemaphoreSubmitInfo *signalSemaphoreInfo, VkFence fence) const {
-        VkSubmitInfo2 info            = {};
+    VkResult submit(VkCommandBufferSubmitInfoKHR *cmdInfo, VkSemaphoreSubmitInfoKHR *waitSemaphoreInfo, VkSemaphoreSubmitInfoKHR *signalSemaphoreInfo, VkFence fence) const {
+        VkSubmitInfo2KHR info            = {};
         info.sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
         info.pNext                    = nullptr;
         info.waitSemaphoreInfoCount   = waitSemaphoreInfo == nullptr ? 0 : 1;
@@ -22,7 +22,7 @@ struct Queue {
         info.pSignalSemaphoreInfos    = signalSemaphoreInfo;
         info.commandBufferInfoCount   = 1;
         info.pCommandBufferInfos      = cmdInfo;
-        return vkQueueSubmit2(queue, 1, &info, fence);
+        return vkQueueSubmit2KHR(queue, 1, &info, fence);
     }
 };
 

@@ -10,7 +10,7 @@ struct ImmediateBuffer {
     jvk::CommandPool pool;
     jvk::CommandBuffer cmd;
 
-    ImmediateBuffer() {};
+    ImmediateBuffer() = default;
 
     VkResult init(VkDevice device, const uint32_t familyIndex, VkCommandPoolCreateFlagBits flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT) {
         VkResult res;
@@ -28,22 +28,22 @@ struct ImmediateBuffer {
 
     void submit(VkQueue queue, std::function<void(VkCommandBuffer cmd)> &&function) const {
         // Reset fence & buffer
-        VK_CHECK(fence.reset());
-        VK_CHECK(cmd.reset());
+        CHECK_VK(fence.reset());
+        CHECK_VK(cmd.reset());
 
         // Create and start buffer
-        VK_CHECK(cmd.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT));
+        CHECK_VK(cmd.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT));
 
         // Record immediate submit commands
         function(cmd);
 
         // End buffer
-        VK_CHECK(cmd.end());
+        CHECK_VK(cmd.end());
 
         // Submit and wait for fence
-        VkCommandBufferSubmitInfo cmdInfo = cmd.submitInfo();
-        VkSubmitInfo2 submit              = jvk::init::submit(&cmdInfo, nullptr, nullptr);
-        VK_CHECK(vkQueueSubmit2(queue, 1, &submit, fence));
+        VkCommandBufferSubmitInfoKHR cmdInfo = cmd.submitInfo();
+        VkSubmitInfo2KHR submit              = jvk::init::submit(&cmdInfo, nullptr, nullptr);
+        CHECK_VK(vkQueueSubmit2KHR(queue, 1, &submit, fence));
         fence.wait();
     }
 };

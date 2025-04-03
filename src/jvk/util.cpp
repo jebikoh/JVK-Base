@@ -7,8 +7,8 @@ void jvk::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout oldL
     // 2. The image layout (oldLayout) is transitioned to the new layout (newLayout)
     // 3. The image is now ready for reads and writes (dstAccessMask) from any stage (dstStageMask)
 
-    VkImageMemoryBarrier2 imageBarrier = {};
-    imageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    VkImageMemoryBarrier2KHR imageBarrier = {};
+    imageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR;
     imageBarrier.pNext = nullptr;
 
     // Stage masks specify when the barrier is executed
@@ -29,24 +29,29 @@ void jvk::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout oldL
     imageBarrier.newLayout = newLayout;
 
     // Target the correct part of the image
-    VkImageAspectFlags aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    if (newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) {
+        aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    } else if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
     imageBarrier.subresourceRange = jvk::init::imageSubresourceRange(aspectMask);
     imageBarrier.image = image;
 
     // Create the dependency & submit
-    VkDependencyInfo depInfo = {};
+    VkDependencyInfoKHR depInfo = {};
     depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     depInfo.pNext = nullptr;
     depInfo.imageMemoryBarrierCount = 1;
     depInfo.pImageMemoryBarriers = &imageBarrier;
-    vkCmdPipelineBarrier2(cmd, &depInfo);
+    vkCmdPipelineBarrier2KHR(cmd, &depInfo);
 }
 
 void jvk::copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExtent2D srcSize, VkExtent2D dstSize) {
     // Bit-block Transfer: copying data from one location to another
     // This is slower than `vkCmdCopyImage` but is more flexible
-    VkImageBlit2 blitRegion {};
-    blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+    VkImageBlit2KHR blitRegion {};
+    blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2_KHR;
     blitRegion.pNext = nullptr;
 
     blitRegion.srcOffsets[1].x = srcSize.width;
@@ -67,8 +72,8 @@ void jvk::copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExte
     blitRegion.dstSubresource.layerCount = 1;
     blitRegion.srcSubresource.mipLevel = 0;
 
-    VkBlitImageInfo2 blitInfo = {};
-    blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+    VkBlitImageInfo2KHR blitInfo = {};
+    blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2_KHR;
     blitInfo.pNext = nullptr;
     blitInfo.srcImage = src;
     blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -78,7 +83,7 @@ void jvk::copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExte
     blitInfo.regionCount = 1;
     blitInfo.pRegions = &blitRegion;
 
-    vkCmdBlitImage2(cmd, &blitInfo);
+    vkCmdBlitImage2KHR(cmd, &blitInfo);
 }
 
 void jvk::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize) {
@@ -88,8 +93,8 @@ void jvk::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSi
         halfSize.width /= 2;
         halfSize.height /= 2;
 
-        VkImageMemoryBarrier2 barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        VkImageMemoryBarrier2KHR barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR;
         barrier.pNext = nullptr;
 
         barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
@@ -106,16 +111,16 @@ void jvk::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSi
         barrier.subresourceRange.baseMipLevel = mip;
         barrier.image = image;
 
-        VkDependencyInfo dependencyInfo{};
+        VkDependencyInfoKHR dependencyInfo{};
         dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
         dependencyInfo.pNext = nullptr;
         dependencyInfo.imageMemoryBarrierCount = 1;
         dependencyInfo.pImageMemoryBarriers = &barrier;
 
-        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+        vkCmdPipelineBarrier2KHR(cmd, &dependencyInfo);
         if (mip < mipLevels - 1) {
-            VkImageBlit2 blit{};
-            blit.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+            VkImageBlit2KHR blit{};
+            blit.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2_KHR;
             blit.pNext = nullptr;
 
             blit.srcOffsets[1].x = imageSize.width;
@@ -136,8 +141,8 @@ void jvk::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSi
             blit.dstSubresource.layerCount = 1;
             blit.dstSubresource.mipLevel = mip + 1;
 
-            VkBlitImageInfo2 blitInfo{};
-            blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+            VkBlitImageInfo2KHR blitInfo{};
+            blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2_KHR;
             blitInfo.pNext = nullptr;
             blitInfo.srcImage = image;
             blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -147,10 +152,71 @@ void jvk::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSi
             blitInfo.regionCount = 1;
             blitInfo.pRegions = &blit;
 
-            vkCmdBlitImage2(cmd, &blitInfo);
+            vkCmdBlitImage2KHR(cmd, &blitInfo);
             imageSize = halfSize;
         }
     }
 
     transitionImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+bool jvk::getSupportedDepthFormat(VkPhysicalDevice physicalDevice, VkFormat *pFormat) {
+    std::vector<VkFormat> formats = {
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_D16_UNORM_S8_UINT,
+        VK_FORMAT_D16_UNORM
+    };
+
+    for (auto &format : formats) {
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+        if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+            *pFormat = format;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool jvk::getSupportedDepthStencilFormat(VkPhysicalDevice physicalDevice, VkFormat *pFormat) {
+    std::vector<VkFormat> formats = {
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_D16_UNORM_S8_UINT
+    };
+
+    for (auto &format: formats) {
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+        if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+            *pFormat = format;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool jvk::formatHasStencil(const VkFormat format) {
+    std::vector<VkFormat> formats = {
+            VK_FORMAT_S8_UINT,
+            VK_FORMAT_D16_UNORM_S8_UINT,
+            VK_FORMAT_D24_UNORM_S8_UINT,
+            VK_FORMAT_D32_SFLOAT_S8_UINT,
+    };
+    return std::ranges::find(formats, format) != formats.end();
+}
+
+bool jvk::formatHasDepth(const VkFormat format) {
+    std::vector<VkFormat> formats = {
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_D16_UNORM_S8_UINT,
+        VK_FORMAT_D16_UNORM
+    };
+    return std::ranges::find(formats, format) != formats.end();
 }

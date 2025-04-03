@@ -43,3 +43,8 @@ void Camera::update(float deltaTime) {
     const glm::mat4 rot = getRotationMatrix();
     position += glm::vec3(rot * glm::vec4(velocity * speed * deltaTime, 0.0f));
 }
+
+glm::vec3 Camera::getFront() const {
+    const glm::mat4 rot = getRotationMatrix();
+    return -glm::vec3(rot[2]);
+}

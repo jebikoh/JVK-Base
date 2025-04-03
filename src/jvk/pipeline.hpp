@@ -52,7 +52,23 @@ struct PipelineBuilder {
     void disableDepthTest();
     void enableDepthTest(bool depthWriteEnable, VkCompareOp compareOp);
 
+    // Stencil
+    void disableStencilTest();
+    void enableStencilTest(const VkStencilOpState &front, const VkStencilOpState &back);
+
     VkPipeline buildPipeline(VkDevice device) const;
+};
+
+struct Pipeline {
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+
+    void destroy(const VkDevice device, const bool destroyLayout = false) const {
+        if (destroyLayout) {
+            vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        }
+        vkDestroyPipeline(device, pipeline, nullptr);
+    }
 };
 
 }// namespace VkUtil

@@ -1,19 +1,103 @@
 #version 450
 
 #extension GL_GOOGLE_include_directive : require
-#include "input_structures.glsl"
+#include "mesh_input_structures.glsl"
 
 layout(location = 0) in vec3 inNormal;
 layout(location = 1) in vec3 inColor;
 layout(location = 2) in vec2 inUV;
+layout(location = 3) in vec3 inFragPos;
 
 layout(location = 0) out vec4 outFragColor;
 
+vec3 calcDirectionalLight(DirectionalLight light, vec3 normal, vec3 viewDir) {
+    vec3 lightDir = normalize(-light.direction.xyz);
+
+    // Ambient
+    vec3 ambient = light.ambient.rgb * texture(diffuseTex, inUV).rgb;
+
+    // Diffuse
+    float diffuseStrength = max(dot(normal, lightDir), 0.0f);
+    vec3 diffuse = light.diffuse.rgb * diffuseStrength * texture(diffuseTex, inUV).rgb;
+
+    // Specular
+    vec3 reflectDir = reflect(-lightDir, normal);
+    float specularStrength = pow(max(dot(viewDir, reflectDir), 0.0f), materialData.shininess);
+    vec3 specular = light.specular.rgb * specularStrength * texture(specularTex, inUV).rgb;
+
+    return ambient + diffuse + specular;
+}
+
+vec3 calcPointLight(PointLight light, vec3 normal, vec3 viewDir) {
+    vec3 lightDir = normalize(light.position.xyz - inFragPos);
+
+    // Ambient
+    vec3 ambient = light.ambient.rgb * texture(diffuseTex, inUV).rgb;
+
+    // Diffuse
+    float diffuseStrength = max(dot(normal, lightDir), 0.0f);
+    vec3 diffuse = light.diffuse.rgb * diffuseStrength * texture(diffuseTex, inUV).rgb;
+
+    // Specular
+    vec3 reflectDir = reflect(-lightDir, normal);
+    float specularStrength = pow(max(dot(viewDir, reflectDir), 0.0f), 32);
+    vec3 specular = light.specular.rgb * specularStrength * texture(specularTex, inUV).rgb;
+
+    // Attenuation
+    float distance = length(light.position.xyz - inFragPos);
+    float attenuation = 1.0f / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
+
+    return (ambient + diffuse + specular) * attenuation;
+}
+
+vec3 calcSpotLight(SpotLight light, vec3 normal, vec3 viewDir) {
+    vec3 lightDir = normalize(light.position.xyz - inFragPos);
+
+    // Ambient
+    vec3 ambient = light.ambient * texture(diffuseTex, inUV).rgb;
+
+    // Diffuse
+    float diffuseStrength = max(dot(normal, lightDir), 0.0f);
+    vec3 diffuse = light.diffuse * diffuseStrength * texture(diffuseTex, inUV).rgb;
+
+    // Specular
+    vec3 reflDir = reflect(-lightDir, normal);
+    float specularStrength = pow(max(dot(viewDir, reflDir), 0.0f), 32);
+    vec3 specular = light.specular * specularStrength * texture(specularTex, inUV).rgb;
+
+    // Spotlight
+    float theta = dot(lightDir, normalize(-light.direction.xyz));
+    float epsilon = light.cutOff - light.outerCutOff;
+    float intensity = clamp((theta - light.outerCutOff) / epsilon, 0.0f, 1.0f);
+    diffuse *= intensity;
+    specular *= intensity;
+
+    // Attenuation
+    float distance = length(light.position.xyz - inFragPos);
+    float attenuation = 1.0f / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
+
+    diffuse *= attenuation;
+    specular *= attenuation;
+
+    return ambient + diffuse + specular;
+}
+
 void main() {
-    float lightValue = max(dot(inNormal, sceneData.sunlightDirection.xyz), 0.1f);
+    vec3 norm = normalize(inNormal);
+    vec3 viewDir = normalize(sceneData.cameraPos.xyz - inFragPos);
 
-    vec3 color = inColor * texture(colorTex, inUV).xyz;
-    vec3 ambient = color * sceneData.ambientColor.xyz;
+    // Directional Light
+    vec3 result = vec3(0.0f);
+    result += calcDirectionalLight(sceneData.dirLight, norm, viewDir);
 
-    outFragColor = vec4(color * lightValue * sceneData.sunlightColor.w + ambient, 1.0f);
+    // Point Lights
+    for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+        result += calcPointLight(sceneData.pointLights[i], norm, viewDir);
+    }
+
+    if (sceneData.enableSpotlight == 1) {
+        result += calcSpotLight(sceneData.spotLight, norm, viewDir);
+    }
+
+    outFragColor = vec4(result, 1.0f);
 }

@@ -57,28 +57,28 @@ inline VkImageSubresourceRange imageSubresourceRange(VkImageAspectFlags aspectMa
     return range;
 }
 
-inline VkSemaphoreSubmitInfo semaphoreSubmit(VkPipelineStageFlags2 stageMask, VkSemaphore semaphore) {
-    VkSemaphoreSubmitInfo info = {};
-    info.sType                 = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    info.pNext                 = nullptr;
-    info.semaphore             = semaphore;
-    info.stageMask             = stageMask;
-    info.deviceIndex           = 0;
-    info.value                 = 1;
+inline VkSemaphoreSubmitInfoKHR semaphoreSubmit(VkPipelineStageFlags2KHR stageMask, VkSemaphore semaphore) {
+    VkSemaphoreSubmitInfoKHR info = {};
+    info.sType                    = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    info.pNext                    = nullptr;
+    info.semaphore                = semaphore;
+    info.stageMask                = stageMask;
+    info.deviceIndex              = 0;
+    info.value                    = 1;
     return info;
 }
 
-inline VkCommandBufferSubmitInfo commandBufferSubmit(VkCommandBuffer cmd) {
-    VkCommandBufferSubmitInfo info = {};
-    info.sType                     = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-    info.pNext                     = nullptr;
-    info.commandBuffer             = cmd;
-    info.deviceMask                = 0;
+inline VkCommandBufferSubmitInfoKHR commandBufferSubmit(VkCommandBuffer cmd) {
+    VkCommandBufferSubmitInfoKHR info = {};
+    info.sType                        = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    info.pNext                        = nullptr;
+    info.commandBuffer                = cmd;
+    info.deviceMask                   = 0;
     return info;
 }
 
-inline VkSubmitInfo2 submit(VkCommandBufferSubmitInfo *cmdInfo, VkSemaphoreSubmitInfo *signalSemaphoreInfo, VkSemaphoreSubmitInfo *waitSemaphoreInfo) {
-    VkSubmitInfo2 info            = {};
+inline VkSubmitInfo2KHR submit(VkCommandBufferSubmitInfoKHR *cmdInfo, VkSemaphoreSubmitInfoKHR *signalSemaphoreInfo, VkSemaphoreSubmitInfoKHR *waitSemaphoreInfo) {
+    VkSubmitInfo2KHR info         = {};
     info.sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
     info.pNext                    = nullptr;
     info.waitSemaphoreInfoCount   = waitSemaphoreInfo == nullptr ? 0 : 1;
@@ -120,7 +120,7 @@ inline VkImageViewCreateInfo imageView(VkFormat format, VkImage image, VkImageAs
     return info;
 }
 
-inline VkRenderingAttachmentInfo renderingAttachment(VkImageView view, VkClearValue *clear, VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+inline VkRenderingAttachmentInfo renderingAttachment(const VkImageView view, const VkClearValue *clear, const VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
     VkRenderingAttachmentInfo info{};
     info.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     info.pNext       = nullptr;
@@ -136,19 +136,21 @@ inline VkRenderingAttachmentInfo renderingAttachment(VkImageView view, VkClearVa
     return info;
 }
 
-inline VkRenderingAttachmentInfo depthRenderingAttachment(VkImageView view, VkImageLayout layout) {
+inline VkRenderingAttachmentInfo depthRenderingAttachment(const VkImageView view, const VkClearValue *clear, const VkImageLayout layout) {
     VkRenderingAttachmentInfo info{};
     info.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     info.pNext       = nullptr;
     info.imageView   = view;
     info.imageLayout = layout;
-    info.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    info.loadOp      = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
     info.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
-    info.clearValue.depthStencil.depth = 1.0f;
+    if (clear) {
+        info.clearValue = *clear;
+    }
     return info;
 }
 
-inline VkRenderingInfo rendering(VkExtent2D renderExtent, VkRenderingAttachmentInfo *colorAttachment, VkRenderingAttachmentInfo *depthAttachment) {
+inline VkRenderingInfo rendering(const VkExtent2D renderExtent, const VkRenderingAttachmentInfo *colorAttachment, const VkRenderingAttachmentInfo *depthAttachment) {
     VkRenderingInfo info{};
     info.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
     info.pNext                = nullptr;
@@ -195,4 +197,4 @@ inline VkPipelineLayoutCreateInfo pipelineLayout(VkDescriptorSetLayout *descript
     return info;
 }
 
-}// namespace VkInit
+}// namespace jvk::init

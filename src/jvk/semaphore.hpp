@@ -5,12 +5,12 @@
 namespace jvk {
 
 struct Semaphore {
-    VkSemaphore semaphore;
-    VkDevice device;
+    VkSemaphore semaphore = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
 
     Semaphore() {};
 
-    VkResult init(VkDevice device_, VkSemaphoreCreateFlags flags = 0) {
+    VkResult init(const VkDevice device_, const VkSemaphoreCreateFlags flags = 0) {
         device = device_;
         VkSemaphoreCreateInfo info = {};
         info.sType                 = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -21,8 +21,9 @@ struct Semaphore {
 
     operator VkSemaphore() const { return semaphore; }
 
-    VkSemaphoreSubmitInfo submitInfo(VkPipelineStageFlags2 stageMask) const {
-        VkSemaphoreSubmitInfo info = {};
+    [[nodiscard]]
+    VkSemaphoreSubmitInfoKHR submitInfo(VkPipelineStageFlags2KHR stageMask) const {
+        VkSemaphoreSubmitInfoKHR info = {};
         info.sType                 = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
         info.pNext                 = nullptr;
         info.semaphore             = semaphore;

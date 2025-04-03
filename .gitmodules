@@ -14,3 +14,6 @@
 [submodule "include/fastgltf"]
 	path = include/fastgltf
 	url = https://github.com/spnda/fastgltf.git
+[submodule "include/volk"]
+	path = include/volk
+	url = https://github.com/zeux/volk.git

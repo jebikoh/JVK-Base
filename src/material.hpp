@@ -1,8 +1,9 @@
 #pragma once
 #include <jvk.hpp>
-#include <jvk/buffer.hpp>
-#include <jvk/image.hpp>
 #include <jvk/descriptor.hpp>
+#include <jvk/image.hpp>
+#include <jvk/sampler.hpp>
+#include <jvk/pipeline.hpp>
 
 // MATERIALS
 
@@ -11,23 +12,8 @@
  */
 enum class MaterialPass : uint8_t {
     MAIN_COLOR,
-    TRANSPARENT,
+    TRANSPARENT_PASS,
     OTHER
-};
-
-/**
- * Contains the pipeline and layout to bind for a specific material
- */
-struct MaterialPipeline {
-    VkPipeline pipeline;
-    VkPipelineLayout pipelineLayout;
-
-    void destroy(const VkDevice device, const bool destroyLayout = false) const {
-        if (destroyLayout) {
-            vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-        }
-        vkDestroyPipeline(device, pipeline, nullptr);
-    }
 };
 
 /**
@@ -35,19 +21,12 @@ struct MaterialPipeline {
  * to render that material type
  */
 struct MaterialInstance {
-    MaterialPipeline *pipeline;
+    jvk::Pipeline *pipeline;
     VkDescriptorSet materialSet;
     MaterialPass passType;
 };
 
-/**
- * Small wrapper struct over MaterialInstance for readability
- */
-struct GLTFMaterial {
-    MaterialInstance data;
-};
-
-struct JVKEngine;
+class JVKEngine;
 
 /**
  * GLTF 2.0 Metallic Roughness Material (Incomplete)
@@ -58,16 +37,21 @@ struct JVKEngine;
  *
  * Can instantiate a MaterialInstance class given the required resources.
  */
-struct GLTFMetallicRoughness {
-    MaterialPipeline opaquePipeline;
-    MaterialPipeline transparentPipeline;
-    VkDescriptorSetLayout materialDescriptorLayout;
+struct Material {
+    jvk::Pipeline opaquePipeline;
+    jvk::Pipeline transparentPipeline;
+    VkDescriptorSetLayout materialDescriptorLayout = VK_NULL_HANDLE;
 
     // To be written to UBO
-    struct MaterialConstants {
+    struct alignas(256) MaterialConstants {
+        // PBR
         glm::vec4 colorFactors;
         glm::vec4 metallicRoughnessFactors;
-        glm::vec4 extra[14];
+        // BLINN-PHONG
+        glm::vec4 ambient;
+        glm::vec4 diffuse;
+        glm::vec3 specular;
+        float shininess;
     };
 
     struct MaterialResources {
@@ -76,6 +60,15 @@ struct GLTFMetallicRoughness {
 
         jvk::Image metallicRoughnessImage;
         VkSampler metallicRoughnessSampler;
+
+        jvk::Image ambientImage;
+        VkSampler ambientSampler;
+
+        jvk::Image diffuseImage;
+        jvk::Sampler diffuseSampler;
+
+        jvk::Image specularImage;
+        VkSampler specularSampler;
 
         VkBuffer dataBuffer;
         uint32_t dataBufferOffset;

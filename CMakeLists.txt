@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(JVK_Engine)
+project(JVK_Base)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -20,8 +20,8 @@ add_executable(JVK_Engine src/main.cpp
         src/jvk/descriptor.cpp
         src/jvk/pipeline.cpp
         src/jvk/pipeline.hpp
-        src/mesh.hpp
-        src/mesh.cpp
+        src/scene.hpp
+        src/scene.cpp
         src/camera.hpp
         src/camera.cpp
         src/jvk/commands.hpp
@@ -38,7 +38,12 @@ add_executable(JVK_Engine src/main.cpp
         src/jvk/buffer.hpp
         src/jvk/shaders.hpp
         src/material.cpp
+        src/logger.hpp
 )
+
+if (APPLE)
+    add_compile_definitions(-DJVK_PLAT_MACOS)
+endif()
 
 if (JVK_ENABLE_PERF_FLAGS)
     if (MSVC)
@@ -85,6 +90,10 @@ target_sources(imgui PRIVATE
         include/imgui/imgui_impl_vulkan.cpp
         include/imgui/imgui_impl_sdl2.cpp
 )
+target_compile_definitions(imgui
+    PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK
+)
+target_link_libraries(imgui PUBLIC volk)
 
 # FMT
 include(FetchContent)
@@ -102,11 +111,14 @@ target_include_directories(JVK_Engine
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/include/stb
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/rapidobj
 )
 
 target_link_libraries(imgui PUBLIC Vulkan::Vulkan SDL2::SDL2)
 
-target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL2 GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap imgui glm fastgltf::fastgltf fmt::fmt)
+add_subdirectory(include/volk)
+
+target_link_libraries(JVK_Engine PRIVATE Vulkan::Vulkan SDL2::SDL2main SDL2::SDL2 GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap imgui glm fastgltf::fastgltf fmt::fmt volk)
 
 
 
@@ -118,6 +130,8 @@ set(GLSL_SOURCE_FILES
         "${PROJECT_SOURCE_DIR}/shaders/sky.comp"
         "${PROJECT_SOURCE_DIR}/shaders/mesh.frag"
         "${PROJECT_SOURCE_DIR}/shaders/mesh.vert"
+        "${PROJECT_SOURCE_DIR}/shaders/billboard.vert"
+        "${PROJECT_SOURCE_DIR}/shaders/billboard.frag"
 )
 
 foreach(GLSL ${GLSL_SOURCE_FILES})

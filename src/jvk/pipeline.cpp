@@ -76,6 +76,7 @@ void jvk::PipelineBuilder::setColorAttachmentFormat(VkFormat format) {
 void jvk::PipelineBuilder::setDepthAttachmentFormat(VkFormat format) {
     _renderingInfo.depthAttachmentFormat = format;
 }
+
 void jvk::PipelineBuilder::disableDepthTest() {
     _depthStencil.depthTestEnable       = VK_FALSE;
     _depthStencil.depthWriteEnable      = VK_FALSE;
@@ -98,6 +99,18 @@ void jvk::PipelineBuilder::enableDepthTest(bool depthWriteEnable, VkCompareOp co
     _depthStencil.back                  = {};
     _depthStencil.minDepthBounds        = 0.0f;
     _depthStencil.maxDepthBounds        = 1.0f;
+}
+
+void jvk::PipelineBuilder::disableStencilTest() {
+    _depthStencil.stencilTestEnable = VK_FALSE;
+    _depthStencil.front             = {};
+    _depthStencil.back              = {};
+}
+
+void jvk::PipelineBuilder::enableStencilTest(const VkStencilOpState &front, const VkStencilOpState &back) {
+    _depthStencil.stencilTestEnable = VK_TRUE;
+    _depthStencil.back            = back;
+    _depthStencil.front           = front;
 }
 
 VkPipeline jvk::PipelineBuilder::buildPipeline(const VkDevice device) const {
@@ -143,7 +156,7 @@ VkPipeline jvk::PipelineBuilder::buildPipeline(const VkDevice device) const {
 
     VkPipeline newPipeline;
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS) {
-        fmt::println("Failed to create pipeline");
+        LOG_ERROR("Failed to create pipeline");
         return VK_NULL_HANDLE;
     } else {
         return newPipeline;

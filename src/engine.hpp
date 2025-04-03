@@ -4,9 +4,9 @@
 #include <material.hpp>
 #include <stack>
 
-#include <jvk.hpp>
 #include <immediate.hpp>
-#include <mesh.hpp>
+#include <jvk.hpp>
+#include <scene.hpp>
 
 #include <jvk/commands.hpp>
 #include <jvk/context.hpp>
@@ -18,6 +18,8 @@
 #include <jvk/descriptor.hpp>
 #include <jvk/sampler.hpp>
 #include <jvk/buffer.hpp>
+
+std::optional<jvk::Image> loadImage(const JVKEngine *engine, const std::string &path);
 
 struct ComputePushConstants {
     glm::vec4 data1;
@@ -81,7 +83,7 @@ public:
 
     // DRAW IMAGES
     jvk::Image drawImage_;
-    jvk::Image depthImage_;
+    jvk::Image depthStencilImage_;
     VkExtent2D drawExtent_;
     float renderScale_ = 1.0f;
 
@@ -90,10 +92,9 @@ public:
     VkDescriptorSet drawImageDescriptors_;
     VkDescriptorSetLayout drawImageDescriptorLayout_;
 
-    // PIPELINES
+    // COMPUTE
     std::vector<ComputeEffect> computeEffects_;
     int currentComputeEffect_{0};
-    VkPipeline computePipeline_;
     VkPipelineLayout computePipelineLayout_;
 
     // IMMEDIATE COMMANDS
@@ -117,14 +118,34 @@ public:
     VkDescriptorSetLayout singleImageDescriptorLayout_;
 
     // MATERIALS
-    GLTFMetallicRoughness metallicRoughnessMaterial_;
+    Material metallicRoughnessMaterial_;
     MaterialInstance defaultMaterialData_;
     jvk::Buffer matConstants_;
 
     // SCENE
     DrawContext drawCtx_;
     std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes_;
-    std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes_;
+    std::unordered_map<std::string, std::shared_ptr<Scene>> loadedScenes_;
+
+    // BILLBOARD
+    struct BillboardPushConstants {
+        glm::vec4 particleCenter;
+        glm::vec4 color;
+        glm::vec4 scale; // Use X-component
+        uint32_t textureIndex;
+    };
+
+    jvk::Pipeline billboardPipeline_;
+
+    VkDescriptorSetLayout billboardDescriptorLayout_;
+    VkDescriptorSet billboardDescriptorSet_;
+
+    jvk::Image lightbulbImage_;
+    jvk::Image sunImage_;
+
+    // MSAA
+    VkSampleCountFlagBits maxMsaaSamples_      = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits selectedMsaaSamples_ = VK_SAMPLE_COUNT_4_BIT;
 
     // CAMERA
     Camera mainCamera_;
@@ -136,10 +157,6 @@ public:
         float sceneUpdateTime;
         float meshDrawTime;
     } stats_;
-
-    // MSAA
-    VkSampleCountFlagBits maxMsaaSamples_      = VK_SAMPLE_COUNT_1_BIT;
-    VkSampleCountFlagBits selectedMsaaSamples_ = VK_SAMPLE_COUNT_4_BIT;
 
     struct SDL_Window *window_ = nullptr;
 
@@ -153,19 +170,21 @@ public:
 
     void run();
 
-    GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
+    [[nodiscard]] GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 
     // IMAGES
-    jvk::Image createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT) const;
-    jvk::Image createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
-    void destroyImage(const jvk::Image &image) const;
+    [[nodiscard]] jvk::Image createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT) const;
+    [[nodiscard]] jvk::Image createImage(void *data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
 
     // BUFFERS
-    jvk::Buffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
+    [[nodiscard]] jvk::Buffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
     void destroyBuffer(const jvk::Buffer &buffer) const;
 
     void updateScene();
 private:
+    glm::vec4 billboardColor_ = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    bool enableSpotlight_     = false;
+
     bool resizeRequested_ = false;
     void resizeSwapchain();
 
@@ -180,16 +199,17 @@ private:
     void initImgui();
 
     // DRAW
-    void drawBackground(VkCommandBuffer cmd) const;
     void drawImgui(VkCommandBuffer cmd, VkImageView targetImageView) const;
-    void drawGeometry(VkCommandBuffer r);
+    void drawGeometry(VkCommandBuffer cmd);
+    void drawBillboards(VkCommandBuffer cmd);
 
     // PIPELINES
     void initBackgroundPipelines();
+    void initBillboardPipeline();
 
     // MESHES
     void initDefaultData();
 
     // MSAA
-    VkSampleCountFlagBits getMaxUsableSampleCount();
+    [[nodiscard]] VkSampleCountFlagBits getMaxUsableSampleCount() const;
 };
