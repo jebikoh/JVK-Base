@@ -1,6 +1,6 @@
 # JVK Engine Base
 
-This is my base Vulkan engine which I build my other projects on top of. It has very basic rasterization capabilities built with a thin wrapper around Vulkan 1.3 (`src/jvk`) and a simplified glTF 2.0 scene graph. The project is built with CMake and C++ 20. Note, this is/was a primarily learning project, so it does not follow a lof Vulkan best-practices. The list of resources I used are in the references section at the bottom.
+This is my base Vulkan engine which I build my other projects on top of. It has very basic rasterization capabilities built with a thin wrapper around Vulkan 1.2 (`src/jvk`) and a simplified glTF 2.0 scene graph. The project is built with CMake and C++ 20. Note, this is/was a primarily learning project, so it does not follow a lof Vulkan best-practices. The list of resources I used are in the references section at the bottom.
 
 ![readme.png](readme.png)
 
@@ -13,8 +13,8 @@ This engine is currently being used in two of my other projects:
 ## Dependencies
 
 It uses the following Vulkan extensions:
- - Dynamic Rendering (1.3)
- - Synchronization 2 (1.3)
+ - VK_KHR_dynamic_rendering (1.2)
+ - VK_KHR_synchronization2 (1.2)
  - Buffer Device Addressing (1.2)
  - Descriptor Indexing (1.2)
 
@@ -22,10 +22,12 @@ And the following external dependencies:
  - [fastgltf](https://github.com/spnda/fastgltf)
  - [glm](https://github.com/g-truc/glm)
  - [ImGui](https://github.com/ocornut/imgui)
+ - [rapidobj](https://github.com/guybrush77/rapidobj)
  - [SDL2](https://github.com/libsdl-org/SDL)
  - [stb-image](https://github.com/nothings/stb/blob/master/stb_image.h)
  - [vk-bootstrap](https://github.com/charles-lunarg/vk-bootstrap)
  - [vma](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
+ - [volk](https://github.com/zeux/volk)
 
 These are all vendored in the repository or via git submodules.
 
