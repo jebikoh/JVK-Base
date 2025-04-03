@@ -89,11 +89,15 @@ void JVKEngine::init() {
     mainCamera_.yaw      = 0.0f;
 
     // SCENE
-    // const std::string scenePath = "../assets/duck.glb";
-    // const auto sceneFile        = loadGLTF(this, scenePath);
+//     const std::string scenePath = "../assets/duck.glb";
+//     const auto sceneFile        = loadGLTF(this, scenePath);
 
     const std::string scenePath = "../assets/backpack/backpack.obj";
     const auto sceneFile        = loadOBJ(this, scenePath);
+
+//    const std::string scenePath = "../assets/sponza/sponza.obj";
+//    const auto sceneFile        = loadOBJ(this, scenePath);
+
     assert(sceneFile.has_value());
     loadedScenes_["base_scene"] = *sceneFile;
 
